@@ -10,4 +10,3 @@ namespace SoftwareEngineering.Client;
 public partial class App : Application
 {
 }
-

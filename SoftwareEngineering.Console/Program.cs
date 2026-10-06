@@ -1,9 +1,10 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
-using Microsoft.Extensions.Configuration;
-using Serilog;
 using System;
 using System.IO;
+using Microsoft.Extensions.Configuration;
+using Serilog;
+
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 var configuration = new ConfigurationBuilder()
@@ -15,16 +16,22 @@ Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(configuration)
     .CreateLogger();
 int sdf = 2354;
-if (sdf == 2354) {
+if (sdf == 2354)
+{
     Log.Information("Змінна sdf дорівнює 2354");
-} else {
+}
+else
+{
     Log.Warning("Змінна sdf не дорівнює 2354");
 }
 
-if (sdf == 2354) {
+if (sdf == 2354)
+{
     Log.Information("Змінна sdf дорівнює 2354");
     Log.Information("sheet");
-} else {
+}
+else
+{
     Log.Warning("Змінна sdf не дорівнює 2354");
 }
 
