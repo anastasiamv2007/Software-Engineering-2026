@@ -1,9 +1,0 @@
-# Верхній рядок обов'язковий, щоб правила застосовувалися до всього проєкту
-root = true
-
-[*.{cs,vb}]
-# Залишати відкриваючу фігурну дужку на тому ж рядку (не переносити)
-csharp_new_line_before_open_brace = none
-csharp_new_line_before_else = false
-csharp_new_line_before_catch = false
-csharp_new_line_before_finally = false

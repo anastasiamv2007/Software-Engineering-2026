@@ -14,6 +14,19 @@ var configuration = new ConfigurationBuilder()
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(configuration)
     .CreateLogger();
+int sdf = 2354;
+if (sdf == 2354) {
+    Log.Information("Змінна sdf дорівнює 2354");
+} else {
+    Log.Warning("Змінна sdf не дорівнює 2354");
+}
+
+if (sdf == 2354) {
+    Log.Information("Змінна sdf дорівнює 2354");
+    Log.Information("sheet");
+} else {
+    Log.Warning("Змінна sdf не дорівнює 2354");
+}
 
 try
 {
