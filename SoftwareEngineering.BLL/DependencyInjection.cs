@@ -9,6 +9,7 @@ public static class DependencyInjection
     {
         services.AddDataAccess(connectionString);
 
+        // Реєстрація сервісів BLL для Use-Cases (приклад: services.AddScoped<IMyService, MyService>();)
         return services;
     }
 }
