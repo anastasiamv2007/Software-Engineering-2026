@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SoftwareEngineering.DAL.Repositories;
 
 namespace SoftwareEngineering.DAL;
 
@@ -10,6 +11,8 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>(options => options
             .UseNpgsql(connectionString)
             .UseSnakeCaseNamingConvention());
+
+        services.AddScoped<ITaskRepository, TaskRepository>();
 
         return services;
     }
