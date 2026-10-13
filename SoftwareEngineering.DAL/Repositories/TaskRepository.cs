@@ -22,4 +22,10 @@ public class TaskRepository : ITaskRepository
         this.context.Tasks.Add(task);
         await this.context.SaveChangesAsync();
     }
+
+    // 2
+    public async Task<TaskItem?> GetByIdAsync(Guid id)
+    {
+        return await this.context.Tasks.FirstOrDefaultAsync(task => task.Id == id);
+    }
 }

@@ -1,4 +1,7 @@
-﻿using Moq;
+﻿using System;
+using System.Threading.Tasks;
+using Moq;
+using Xunit;
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Services;
@@ -235,5 +238,55 @@ public class TaskServiceTests
             .Setup(repository => repository.AddAsync(It.IsAny<TaskItem>()))
             .Callback<TaskItem>(task => this.savedTask = task)
             .Returns(Task.CompletedTask);
+    }
+
+    // 2
+
+    [Fact]
+    public async Task GetByIdAsync_EmptyId_ThrowsValidationException()
+    {
+        var mockRepo = new Mock<ITaskRepository>();
+        var service = new TaskService(mockRepo.Object);
+        var emptyId = Guid.Empty;
+
+        var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(emptyId));
+        Assert.Contains("не може бути порожнім", exception.Message);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_TaskNotFound_ThrowsValidationException()
+    {
+        var mockRepo = new Mock<ITaskRepository>();
+        var fakeId = Guid.NewGuid();
+
+        mockRepo.Setup(repo => repo.GetByIdAsync(fakeId)).ReturnsAsync((TaskItem?)null);
+        var service = new TaskService(mockRepo.Object);
+
+        var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(fakeId));
+        Assert.Contains("не знайдено", exception.Message);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ValidId_ReturnsTaskModel()
+    {
+        var mockRepo = new Mock<ITaskRepository>();
+        var validId = Guid.NewGuid();
+        var fakeEntity = new TaskItem
+        {
+            Id = validId,
+            Title = "Тестове завдання",
+            ProjectId = Guid.NewGuid(),
+            TaskCode = "PL-1",
+            Status = TaskItemStatus.Todo
+        };
+
+        mockRepo.Setup(repo => repo.GetByIdAsync(validId)).ReturnsAsync(fakeEntity);
+        var service = new TaskService(mockRepo.Object);
+
+        var result = await service.GetByIdAsync(validId);
+
+        Assert.NotNull(result);
+        Assert.Equal(validId, result.Id);
+        Assert.Equal("Тестове завдання", result.Title);
     }
 }

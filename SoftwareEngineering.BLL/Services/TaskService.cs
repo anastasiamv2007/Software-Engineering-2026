@@ -31,6 +31,21 @@ public class TaskService : BaseService, ITaskService
         });
     }
 
+    // 2
+    public async Task<TaskModel> GetByIdAsync(Guid id)
+    {
+        return await this.ExecuteWithLoggingAsync("Перегляд деталей завдання", async () =>
+        {
+            this.ValidateCondition(id != Guid.Empty, "Ідентифікатор завдання не може бути порожнім.");
+
+            var entity = await this.taskRepository.GetByIdAsync(id);
+
+            this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+
+            return ToModel(entity);
+        });
+    }
+
     private static TaskModel ToModel(TaskItem entity)
     {
         return new TaskModel
