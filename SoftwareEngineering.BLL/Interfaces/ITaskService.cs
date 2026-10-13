@@ -8,4 +8,7 @@ public interface ITaskService : IService
 
     // 2
     Task<TaskModel> GetByIdAsync(Guid id);
+
+    //3
+    Task<TaskModel> UpdateAsync(TaskModel model);
 }

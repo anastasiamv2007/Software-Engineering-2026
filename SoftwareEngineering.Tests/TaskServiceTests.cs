@@ -287,4 +287,45 @@ public class TaskServiceTests
         Assert.Equal(validId, result.Id);
         Assert.Equal("Тестове завдання", result.Title);
     }
+
+    // 3
+
+    [Fact]
+    public async Task UpdateAsync_ValidModel_CallsRepositoryUpdate()
+    {
+        var validModel = new TaskModel
+        {
+            Id = Guid.NewGuid(),
+            Title = "Оновлене завдання",
+            Description = "Оновлений опис",
+            Priority = TaskPriority.High,
+            Status = TaskItemStatus.Todo,
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+        var service = this.CreateService();
+
+        await service.UpdateAsync(validModel);
+
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.Is<TaskItem>(
+            t => t.Id == validModel.Id &&
+                 t.Title == validModel.Title &&
+                 t.Description == validModel.Description)), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_EmptyTitle_ThrowsValidationException()
+    {
+        var invalidModel = new TaskModel
+        {
+            Id = Guid.NewGuid(),
+            Title = string.Empty, 
+            Description = "Опис",
+            Priority = TaskPriority.Low
+        };
+        var service = this.CreateService();
+
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(invalidModel));
+
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
 }
