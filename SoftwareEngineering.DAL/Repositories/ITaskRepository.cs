@@ -10,4 +10,7 @@ public interface ITaskRepository
 
     // 2
     Task<TaskItem?> GetByIdAsync(Guid id);
+
+    // 3
+    Task UpdateAsync(TaskItem task);
 }
