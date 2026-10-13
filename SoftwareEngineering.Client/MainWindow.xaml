@@ -1,12 +1,34 @@
 ﻿<Window x:Class="SoftwareEngineering.Client.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:SoftwareEngineering.Client"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="Planora - Головна панель" Height="650" Width="950"
+        WindowStartupLocation="CenterScreen">
     <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
+        <!-- Ліва панель навігації -->
+        <StackPanel Grid.Column="0" Background="#1E1E2D" Margin="0,0,0,0">
+            <TextBlock Text="PLANORA" Foreground="White" FontSize="20" FontWeight="Bold" Margin="20,20,20,30"/>
+
+            <!-- Кнопка створення завдання, яка відповідає макетам -->
+            <Button Content="+ Нове завдання" 
+                    Height="40" 
+                    Margin="15,0,15,15" 
+                    Background="#007ACC" 
+                    Foreground="White" 
+                    FontWeight="Bold"
+                    Click="OpenCreateTaskWindow_Click"/>
+        </StackPanel>
+
+        <!-- Права область зі списком завдань -->
+        <Grid Grid.Column="1" Margin="20">
+            <TextBlock Text="Список завдань" FontSize="18" FontWeight="Bold" VerticalAlignment="Top"/>
+
+            <!-- Тут буде ваш список / DataGrid завдань -->
+            <DataGrid x:Name="TasksDataGrid" Margin="0,40,0,0" AutoGenerateColumns="True"/>
+        </Grid>
     </Grid>
 </Window>
