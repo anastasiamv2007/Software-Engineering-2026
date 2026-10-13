@@ -85,5 +85,10 @@ dotnet_style_coalesce_expression = true:suggestion
 dotnet_style_null_propagation = true:suggestion
 dotnet_style_prefer_is_null_check_over_reference_equality_method = true:suggestion
 dotnet_style_prefer_auto_properties = true:silent
-[*.cs]
-dotnet_diagnostic.SA1600.severity = none
+
+
+# Default severity for all analyzer diagnostics
+dotnet_analyzer_diagnostic.severity = none
+
+[*.{cs,vb}]
+dotnet_diagnostic.SA0001.severity = none

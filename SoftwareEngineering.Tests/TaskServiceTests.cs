@@ -15,9 +15,7 @@ public class TaskServiceTests
 {
     private const int MaxTitleLength = 200;
 
-    private readonly Mock<ITaskRepository> repositoryMock = new();
-
-    private TaskItem? savedTask;
+    private readonly Mock<ITaskRepository> repositoryMock = new(); private TaskItem? savedTask;
 
     [Fact]
     public async Task CreateAsync_ValidModel_ReturnsCodeBasedOnProjectTaskCount()
