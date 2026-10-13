@@ -42,7 +42,7 @@ public class TaskService : BaseService, ITaskService
 
             this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
 
-            return ToModel(entity);
+            return ToModel(entity!);
         });
     }
 
@@ -89,4 +89,42 @@ public class TaskService : BaseService, ITaskService
             Status = TaskItemStatus.Todo,
         };
     }
+
+    //3
+    public async Task<TaskModel> UpdateAsync(TaskModel model)
+    {
+        return await this.ExecuteWithLoggingAsync("Редагування завдання", async () =>
+        {
+            this.ValidateUpdateTask(model);
+
+            var entity = await this.taskRepository.GetByIdAsync(model.Id);
+            this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+
+            entity!.Title = model.Title.Trim();
+            entity.Description = model.Description;
+            entity.Deadline = model.Deadline?.ToUniversalTime();
+            entity.Priority = model.Priority;
+            entity.CategoryId = model.CategoryId;
+
+            await this.taskRepository.UpdateAsync(entity);
+
+            return ToModel(entity);
+        });
+    }
+
+    private void ValidateUpdateTask(TaskModel model)
+    {
+        this.ValidateCondition(model != null, "Дані завдання не передано.");
+        this.ValidateCondition(model!.Id != Guid.Empty, "Ідентифікатор завдання не вказано.");
+        this.ValidateNotEmpty(model.Title, "Назва");
+        this.ValidateCondition(model.Title.Trim().Length <= MaxTitleLength, "Назва занадто довга.");
+
+        if (model.Deadline.HasValue)
+        {
+            this.ValidateCondition(model.Deadline.Value.ToUniversalTime() > DateTime.UtcNow, "Дедлайн не може бути в минулому.");
+        }
+    }
 }
+
+
+
