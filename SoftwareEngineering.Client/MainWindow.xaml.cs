@@ -1,23 +1,41 @@
-﻿using System.Text;
+﻿using SoftwareEngineering.BLL.Interfaces;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
-namespace SoftwareEngineering.Client;
-
-/// <summary>
-/// Interaction logic for MainWindow.xaml
-/// </summary>
-public partial class MainWindow : Window
+namespace SoftwareEngineering.Client
 {
-    public MainWindow()
+    public partial class MainWindow : Window
     {
-        InitializeComponent();
+        private readonly ITaskService taskService;
+
+        // Конструктор приймає сервіс через ін'єкцію залежностей (Dependency Injection)
+        public MainWindow(ITaskService taskService)
+        {
+            InitializeComponent();
+            this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
+
+            // Завантажуємо список завдань при запуску головного вікна
+            LoadTasks();
+        }
+
+        private void OpenCreateTaskWindow_Click(object sender, RoutedEventArgs e)
+        {
+            // Передаємо сервіс у вікно створення завдання
+            var createWindow = new CreateTaskView(taskService)
+            {
+                Owner = this
+            };
+
+            // Якщо завдання успішно створено, оновлюємо список
+            if (createWindow.ShowDialog() == true)
+            {
+                LoadTasks();
+            }
+        }
+
+        private void LoadTasks()
+        {
+            // Тут згодом буде логіка завантаження списку завдань у ваш DataGrid чи UI-елемент.
+            // Поки що залишаємо метод порожнім, щоб він не викликав помилок компіляції.
+        }
     }
 }
