@@ -1,7 +1,4 @@
-﻿using System;
-using System.Threading.Tasks;
-using Moq;
-using Xunit;
+﻿using Moq;
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Services;
@@ -293,6 +290,7 @@ public class TaskServiceTests
     [Fact]
     public async Task UpdateAsync_ValidModel_CallsRepositoryUpdate()
     {
+
         var validModel = new TaskModel
         {
             Id = Guid.NewGuid(),
@@ -302,9 +300,24 @@ public class TaskServiceTests
             Status = TaskItemStatus.Todo,
             Deadline = DateTime.UtcNow.AddDays(1)
         };
+
+
+        var existingEntity = new TaskItem
+        {
+            Id = validModel.Id,
+            ProjectId = Guid.NewGuid(),
+            Title = "Стара назва"
+        };
+
+        this.repositoryMock
+            .Setup(repository => repository.GetByIdAsync(validModel.Id))
+            .ReturnsAsync(existingEntity);
+
         var service = this.CreateService();
 
+
         await service.UpdateAsync(validModel);
+
 
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.Is<TaskItem>(
             t => t.Id == validModel.Id &&
@@ -318,7 +331,7 @@ public class TaskServiceTests
         var invalidModel = new TaskModel
         {
             Id = Guid.NewGuid(),
-            Title = string.Empty, 
+            Title = string.Empty,
             Description = "Опис",
             Priority = TaskPriority.Low
         };
