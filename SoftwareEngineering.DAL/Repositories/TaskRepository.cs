@@ -35,4 +35,10 @@ public class TaskRepository : ITaskRepository
         this.context.Tasks.Update(task);
         await this.context.SaveChangesAsync();
     }
+
+    public async Task DeleteAsync(TaskItem entity) {
+        this.context.Tasks.Remove(entity);
+
+        await this.context.SaveChangesAsync();
+    }
 }

@@ -1,4 +1,5 @@
-﻿using SoftwareEngineering.BLL.Interfaces;
+﻿using Microsoft.EntityFrameworkCore;
+using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.DAL.Entities;
 using SoftwareEngineering.DAL.Enums;
@@ -123,6 +124,22 @@ public class TaskService : BaseService, ITaskService
         {
             this.ValidateCondition(model.Deadline.Value.ToUniversalTime() > DateTime.UtcNow, "Дедлайн не може бути в минулому.");
         }
+    }
+
+    public async Task<TaskModel> DeleteTaskByOwnerAsync(TaskModel model, Guid currentUserId) {
+        await this.ExecuteWithLoggingAsync("Видалення завдання", async () => {
+            this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор завдання не вказано.");
+
+            var entity = await this.taskRepository.GetByIdAsync(currentUserId) ;
+            this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+
+            // Місце під Activity Log / перевірку прав
+            // ...
+
+            await this.taskRepository.DeleteAsync(entity!);
+            return true;
+        });
+        return model;
     }
 }
 

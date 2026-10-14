@@ -80,5 +80,16 @@ namespace SoftwareEngineering.Client
                 MessageBox.Show("Будь ласка, виберіть завдання для редагування.", "Увага", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
+
+        private void DeleteTaskMenuItem_Click(object sender, RoutedEventArgs e) {
+            var deleteWindow = new DeleteTaskWindow(taskService) {
+                Owner = this
+            };
+
+            // Відкриваємо діалог
+            if (deleteWindow.ShowDialog() == true) {
+                LoadTasks(); // якщо щось видалили — оновити таблицю
+            }
+        }
     }
 }

@@ -13,4 +13,6 @@ public interface ITaskRepository
 
     // 3
     Task UpdateAsync(TaskItem task);
+
+    Task DeleteAsync(TaskItem entity);
 }
