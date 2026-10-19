@@ -31,48 +31,59 @@ public class TaskService : BaseService, ITaskService
         });
     }
 
-    private static TaskModel ToModel(TaskItem entity)
+    // 2
+    public async Task<TaskModel> GetByIdAsync(Guid id)
     {
-        return new TaskModel
+        return await this.ExecuteWithLoggingAsync("Перегляд деталей завдання", async () =>
         {
-            Id = entity.Id,
-            ProjectId = entity.ProjectId,
-            TaskCode = entity.TaskCode,
-            Title = entity.Title,
-            Description = entity.Description,
-            Deadline = entity.Deadline,
-            Priority = entity.Priority,
-            CategoryId = entity.CategoryId,
-            Status = entity.Status,
-        };
+            this.ValidateCondition(id != Guid.Empty, "Ідентифікатор завдання не може бути порожнім.");
+
+            var entity = await this.taskRepository.GetByIdAsync(id);
+
+            this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+
+            return ToModel(entity!);
+        });
     }
 
-    private void ValidateNewTask(TaskModel model)
+    // 3
+    public async Task<TaskModel> UpdateAsync(TaskModel model)
     {
-        this.ValidateCondition(model != null, "Дані завдання не передано.");
-        this.ValidateNotEmpty(model!.Title, "Назва");
-        this.ValidateCondition(model.Title.Trim().Length <= MaxTitleLength, "Назва занадто довга.");
-        this.ValidateCondition(model.ProjectId != Guid.Empty, "Не вказано проєкт.");
-        this.ValidateCondition(model.Deadline.HasValue, "Дедлайн не вказано.");
-        this.ValidateCondition(model.Deadline!.Value.ToUniversalTime() > DateTime.UtcNow, "Дедлайн не може бути в минулому.");
+        return await this.ExecuteWithLoggingAsync("Редагування завдання", async () =>
+        {
+            this.ValidateUpdateTask(model);
+
+            var entity = await this.taskRepository.GetByIdAsync(model.Id);
+            this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+
+            entity!.Title = model.Title.Trim();
+            entity.Description = model.Description;
+            entity.Deadline = model.Deadline?.ToUniversalTime();
+            entity.Priority = model.Priority;
+            entity.CategoryId = model.CategoryId;
+
+            await this.taskRepository.UpdateAsync(entity);
+
+            return ToModel(entity);
+        });
     }
 
-    private async Task<TaskItem> BuildEntityAsync(TaskModel model)
+    public async Task<TaskModel> DeleteTaskByOwnerAsync(TaskModel model, Guid currentUserId)
     {
-        var tasksInProject = await this.taskRepository.CountByProjectAsync(model.ProjectId);
-
-        return new TaskItem
+        await this.ExecuteWithLoggingAsync("Видалення завдання", async () =>
         {
-            Id = Guid.NewGuid(),
-            ProjectId = model.ProjectId,
-            TaskCode = $"{TaskCodePrefix}{tasksInProject + 1}",
-            Title = model.Title.Trim(),
-            Description = model.Description,
-            Deadline = model.Deadline!.Value.ToUniversalTime(),
-            Priority = model.Priority,
-            CategoryId = model.CategoryId,
-            Status = TaskItemStatus.Todo,
-        };
+            this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор завдання не вказано.");
+
+            var entity = await this.taskRepository.GetByIdAsync(currentUserId);
+            this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+
+            // Місце під Activity Log / перевірку прав
+            // ...
+
+            await this.taskRepository.DeleteAsync(entity!);
+            return true;
+        });
+        return model;
     }
 
     // 7
@@ -107,10 +118,60 @@ public class TaskService : BaseService, ITaskService
         });
     }
 
+    private static TaskModel ToModel(TaskItem entity)
+    {
+        return new TaskModel
+        {
+            Id = entity.Id,
+            ProjectId = entity.ProjectId,
+            TaskCode = entity.TaskCode,
+            Title = entity.Title,
+            Description = entity.Description,
+            Deadline = entity.Deadline,
+            Priority = entity.Priority,
+            CategoryId = entity.CategoryId,
+            Status = entity.Status,
+        };
+    }
 
+    private void ValidateNewTask(TaskModel model)
+    {
+        this.ValidateCondition(model != null, "Дані завдання не передано.");
+        this.ValidateNotEmpty(model!.Title, "Назва");
+        this.ValidateCondition(model.Title.Trim().Length <= MaxTitleLength, "Назва занадто довга.");
+        this.ValidateCondition(model.ProjectId != Guid.Empty, "Не вказано проєкт.");
+        this.ValidateCondition(model.Deadline.HasValue, "Дедлайн не вказано.");
+        this.ValidateCondition(model.Deadline!.Value.ToUniversalTime() > DateTime.UtcNow, "Дедлайн не може бути в минулому.");
+    }
 
+    private void ValidateUpdateTask(TaskModel model)
+    {
+        this.ValidateCondition(model != null, "Дані завдання не передано.");
+        this.ValidateCondition(model!.Id != Guid.Empty, "Ідентифікатор завдання не вказано.");
+        this.ValidateNotEmpty(model.Title, "Назва");
+        this.ValidateCondition(model.Title.Trim().Length <= MaxTitleLength, "Назва занадто довга.");
 
+        if (model.Deadline.HasValue)
+        {
+            this.ValidateCondition(model.Deadline.Value.ToUniversalTime() > DateTime.UtcNow, "Дедлайн не може бути в минулому.");
+        }
+    }
 
+    private async Task<TaskItem> BuildEntityAsync(TaskModel model)
+    {
+        var tasksInProject = await this.taskRepository.CountByProjectAsync(model.ProjectId);
 
-
+        return new TaskItem
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = model.ProjectId,
+            TaskCode = $"{TaskCodePrefix}{tasksInProject + 1}",
+            Title = model.Title.Trim(),
+            Description = model.Description,
+            Deadline = model.Deadline!.Value.ToUniversalTime(),
+            Priority = model.Priority,
+            CategoryId = model.CategoryId,
+            Status = TaskItemStatus.Todo,
+        };
+    }
 }

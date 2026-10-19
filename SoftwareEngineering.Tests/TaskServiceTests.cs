@@ -234,4 +234,111 @@ public class TaskServiceTests
             .Callback<TaskItem>(task => this.savedTask = task)
             .Returns(Task.CompletedTask);
     }
+
+    // 2
+
+    [Fact]
+    public async Task GetByIdAsync_EmptyId_ThrowsValidationException()
+    {
+        var mockRepo = new Mock<ITaskRepository>();
+        var service = new TaskService(mockRepo.Object);
+        var emptyId = Guid.Empty;
+
+        var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(emptyId));
+        Assert.Contains("не може бути порожнім", exception.Message);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_TaskNotFound_ThrowsValidationException()
+    {
+        var mockRepo = new Mock<ITaskRepository>();
+        var fakeId = Guid.NewGuid();
+
+        mockRepo.Setup(repo => repo.GetByIdAsync(fakeId)).ReturnsAsync((TaskItem?)null);
+        var service = new TaskService(mockRepo.Object);
+
+        var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(fakeId));
+        Assert.Contains("не знайдено", exception.Message);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ValidId_ReturnsTaskModel()
+    {
+        var mockRepo = new Mock<ITaskRepository>();
+        var validId = Guid.NewGuid();
+        var fakeEntity = new TaskItem
+        {
+            Id = validId,
+            Title = "Тестове завдання",
+            ProjectId = Guid.NewGuid(),
+            TaskCode = "PL-1",
+            Status = TaskItemStatus.Todo
+        };
+
+        mockRepo.Setup(repo => repo.GetByIdAsync(validId)).ReturnsAsync(fakeEntity);
+        var service = new TaskService(mockRepo.Object);
+
+        var result = await service.GetByIdAsync(validId);
+
+        Assert.NotNull(result);
+        Assert.Equal(validId, result.Id);
+        Assert.Equal("Тестове завдання", result.Title);
+    }
+
+    // 3
+
+    [Fact]
+    public async Task UpdateAsync_ValidModel_CallsRepositoryUpdate()
+    {
+
+        var validModel = new TaskModel
+        {
+            Id = Guid.NewGuid(),
+            Title = "Оновлене завдання",
+            Description = "Оновлений опис",
+            Priority = TaskPriority.High,
+            Status = TaskItemStatus.Todo,
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+
+
+        var existingEntity = new TaskItem
+        {
+            Id = validModel.Id,
+            ProjectId = Guid.NewGuid(),
+            Title = "Стара назва"
+        };
+
+        this.repositoryMock
+            .Setup(repository => repository.GetByIdAsync(validModel.Id))
+            .ReturnsAsync(existingEntity);
+
+        var service = this.CreateService();
+
+
+        await service.UpdateAsync(validModel);
+
+
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.Is<TaskItem>(
+            t => t.Id == validModel.Id &&
+                 t.Title == validModel.Title &&
+                 t.Description == validModel.Description)), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_EmptyTitle_ThrowsValidationException()
+    {
+        var invalidModel = new TaskModel
+        {
+            Id = Guid.NewGuid(),
+            Title = string.Empty,
+            Description = "Опис",
+            Priority = TaskPriority.Low
+        };
+        var service = this.CreateService();
+
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(invalidModel));
+
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
 }

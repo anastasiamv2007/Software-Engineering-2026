@@ -21,6 +21,7 @@
                     Foreground="White" 
                     FontWeight="Bold"
                     Click="OpenCreateTaskWindow_Click"/>
+
             <!-- 7: Оновлення прогресу -->
             <Button Content="Оновити прогрес"
                     Height="40"
@@ -29,6 +30,16 @@
                     Foreground="White"
                     FontWeight="Bold"
                     Click="UpdateProgressMenuItem_Click"/>
+
+
+            <Button Content="- Видалити завдання" 
+                    Height="40" 
+                    Margin="15,0,15,15" 
+                    Background="#cc0000" 
+                    Foreground="White" 
+                    FontWeight="Bold"
+                    Click="DeleteTaskMenuItem_Click"/>
+
         </StackPanel>
 
         <!-- Права область зі списком завдань -->
@@ -36,7 +47,16 @@
             <TextBlock Text="Список завдань" FontSize="18" FontWeight="Bold" VerticalAlignment="Top"/>
 
             <!-- Тут буде ваш список / DataGrid завдань -->
-            <DataGrid x:Name="TasksDataGrid" Margin="0,40,0,0" AutoGenerateColumns="True"/>
+            <DataGrid x:Name="TasksDataGrid" Margin="0,40,0,0" AutoGenerateColumns="True" IsReadOnly="True" SelectionMode="Single">
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <!-- Виклик вікна перегляду деталей (Use-Case 2) -->
+                        <MenuItem Header="Деталі завдання" Click="ViewDetailsMenuItem_Click" />
+                        <!-- Виклик вікна редагування (Use-Case 3) -->
+                        <MenuItem Header="Редагувати" Click="EditTaskMenuItem_Click" />
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
+            </DataGrid>
         </Grid>
     </Grid>
 </Window>
