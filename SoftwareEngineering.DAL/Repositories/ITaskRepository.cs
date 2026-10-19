@@ -7,4 +7,8 @@ public interface ITaskRepository
     Task<int> CountByProjectAsync(Guid projectId);
 
     Task AddAsync(TaskItem task);
+
+    Task<TaskItem?> GetByIdAsync(Guid id);
+
+    Task UpdateAsync(TaskItem task);
 }

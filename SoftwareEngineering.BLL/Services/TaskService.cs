@@ -74,4 +74,43 @@ public class TaskService : BaseService, ITaskService
             Status = TaskItemStatus.Todo,
         };
     }
+
+    // 7
+    public async Task<TaskModel> UpdateProgressAsync(Guid taskId, TaskItemStatus newStatus, Guid currentUserId)
+    {
+        return await this.ExecuteWithLoggingAsync("Оновлення прогресу завдання", async () =>
+        {
+            this.ValidateCondition(taskId != Guid.Empty, "Ідентифікатор завдання не вказано.");
+            this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор користувача не вказано.");
+            this.ValidateCondition(Enum.IsDefined(newStatus), "Невідомий статус завдання.");
+
+            var entity = await this.taskRepository.GetByIdAsync(taskId);
+            this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+            this.ValidateCondition(
+                entity!.AssigneeId == currentUserId,
+                "Лише співвиконавець завдання може оновлювати прогрес.");
+            this.ValidateCondition(entity.Status != newStatus, "Завдання вже має такий статус.");
+
+            var oldStatus = entity.Status;
+            entity.Status = newStatus;
+
+            await this.taskRepository.UpdateAsync(entity);
+
+            this.Logger.Information(
+                "Користувач {UserId} змінив статус завдання {TaskId} з {OldStatus} на {NewStatus}",
+                currentUserId,
+                taskId,
+                oldStatus,
+                newStatus);
+
+            return ToModel(entity);
+        });
+    }
+
+
+
+
+
+
+
 }
