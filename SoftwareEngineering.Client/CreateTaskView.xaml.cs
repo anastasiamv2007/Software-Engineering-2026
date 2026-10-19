@@ -11,6 +11,7 @@ namespace SoftwareEngineering.Client
     {
         private readonly ITaskService taskService;
 
+
         public CreateTaskView(ITaskService taskService)
         {
             InitializeComponent();

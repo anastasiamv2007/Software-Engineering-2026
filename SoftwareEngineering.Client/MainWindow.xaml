@@ -22,6 +22,16 @@
                     FontWeight="Bold"
                     Click="OpenCreateTaskWindow_Click"/>
 
+            <!-- 7: Оновлення прогресу -->
+            <Button Content="Оновити прогрес"
+                    Height="40"
+                    Margin="15,0,15,15"
+                    Background="#2E8B57"
+                    Foreground="White"
+                    FontWeight="Bold"
+                    Click="UpdateProgressMenuItem_Click"/>
+
+
             <Button Content="- Видалити завдання" 
                     Height="40" 
                     Margin="15,0,15,15" 
@@ -29,6 +39,7 @@
                     Foreground="White" 
                     FontWeight="Bold"
                     Click="DeleteTaskMenuItem_Click"/>
+
         </StackPanel>
 
         <!-- Права область зі списком завдань -->

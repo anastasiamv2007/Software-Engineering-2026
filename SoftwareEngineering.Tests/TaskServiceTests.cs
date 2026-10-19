@@ -78,6 +78,26 @@ public class TaskServiceTests
         Assert.Equal(priority, this.savedTask!.Priority);
     }
 
+    private TaskItem CreateAssignedTask(out Guid assigneeId)
+    {
+        assigneeId = Guid.NewGuid();
+        var entity = new TaskItem
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
+            TaskCode = "PL-1",
+            Title = "Описати вимоги",
+            AssigneeId = assigneeId,
+            Status = TaskItemStatus.Todo,
+        };
+
+        this.repositoryMock
+            .Setup(repository => repository.GetByIdAsync(entity.Id))
+            .ReturnsAsync(entity);
+
+        return entity;
+    }
+
     [Fact]
     public async Task CreateAsync_TitleWithSpaces_SavesTrimmedTitle()
     {
@@ -340,5 +360,167 @@ public class TaskServiceTests
         await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(invalidModel));
 
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
+    // 7
+
+    [Theory]
+    [InlineData(TaskItemStatus.InProgress)]
+    [InlineData(TaskItemStatus.Done)]
+    public async Task UpdateProgressAsync_AssigneeAndNewStatus_SavesNewStatus(TaskItemStatus newStatus)
+    {
+        // Arrange
+        var entity = this.CreateAssignedTask(out var userId);
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.UpdateProgressAsync(entity.Id, newStatus, userId);
+
+        // Assert
+        Assert.Equal(newStatus, result.Status);
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_AssigneeAndNewStatus_CallsRepositoryUpdateOnce()
+    {
+        // Arrange
+        var entity = this.CreateAssignedTask(out var userId);
+        var service = this.CreateService();
+
+        // Act
+        await service.UpdateProgressAsync(entity.Id, TaskItemStatus.InProgress, userId);
+
+        // Assert
+        this.repositoryMock.Verify(
+            repository => repository.UpdateAsync(It.Is<TaskItem>(task => task.Status == TaskItemStatus.InProgress)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_ValidRequest_ReturnsModelWithSameId()
+    {
+        // Arrange
+        var entity = this.CreateAssignedTask(out var userId);
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, userId);
+
+        // Assert
+        Assert.Equal(entity.Id, result.Id);
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_EmptyTaskId_ThrowsValidationException()
+    {
+        // Arrange
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateProgressAsync(Guid.Empty, TaskItemStatus.Done, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_EmptyUserId_ThrowsValidationException()
+    {
+        // Arrange
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateProgressAsync(Guid.NewGuid(), TaskItemStatus.Done, Guid.Empty));
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_UndefinedStatus_ThrowsValidationException()
+    {
+        // Arrange
+        var service = this.CreateService();
+        const TaskItemStatus undefinedStatus = (TaskItemStatus)999;
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateProgressAsync(Guid.NewGuid(), undefinedStatus, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_TaskNotFound_ThrowsValidationException()
+    {
+        // Arrange
+        this.repositoryMock
+            .Setup(repository => repository.GetByIdAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((TaskItem?)null);
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateProgressAsync(Guid.NewGuid(), TaskItemStatus.Done, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_UserIsNotAssignee_ThrowsValidationException()
+    {
+        // Arrange
+        var entity = this.CreateAssignedTask(out _);
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_TaskWithoutAssignee_ThrowsValidationException()
+    {
+        // Arrange
+        var entity = this.CreateAssignedTask(out _);
+        entity.AssigneeId = null;
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_SameStatus_ThrowsValidationException()
+    {
+        // Arrange
+        var entity = this.CreateAssignedTask(out var userId);
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateProgressAsync(entity.Id, entity.Status, userId));
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_UserIsNotAssignee_DoesNotUpdateTask()
+    {
+        // Arrange
+        var entity = this.CreateAssignedTask(out _);
+        var service = this.CreateService();
+
+        // Act
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid()));
+
+        // Assert
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateProgressAsync_RepositoryFails_PropagatesException()
+    {
+        // Arrange
+        var entity = this.CreateAssignedTask(out var userId);
+        this.repositoryMock
+            .Setup(repository => repository.UpdateAsync(It.IsAny<TaskItem>()))
+            .ThrowsAsync(new InvalidOperationException());
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, userId));
     }
 }

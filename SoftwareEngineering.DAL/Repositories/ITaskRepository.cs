@@ -8,6 +8,7 @@ public interface ITaskRepository
 
     Task AddAsync(TaskItem task);
 
+
     // 2
     Task<TaskItem?> GetByIdAsync(Guid id);
 
@@ -15,4 +16,5 @@ public interface ITaskRepository
     Task UpdateAsync(TaskItem task);
 
     Task DeleteAsync(TaskItem entity);
+
 }

@@ -30,13 +30,14 @@ public class TaskRepository : ITaskRepository
     }
 
     // 3
-        public async Task UpdateAsync(TaskItem task)
+    public async Task UpdateAsync(TaskItem task)
     {
         this.context.Tasks.Update(task);
         await this.context.SaveChangesAsync();
     }
 
-    public async Task DeleteAsync(TaskItem entity) {
+    public async Task DeleteAsync(TaskItem entity)
+    {
         this.context.Tasks.Remove(entity);
 
         await this.context.SaveChangesAsync();
