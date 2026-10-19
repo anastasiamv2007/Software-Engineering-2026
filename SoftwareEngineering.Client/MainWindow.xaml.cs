@@ -81,15 +81,35 @@ namespace SoftwareEngineering.Client
             }
         }
 
-        private void DeleteTaskMenuItem_Click(object sender, RoutedEventArgs e) {
-            var deleteWindow = new DeleteTaskWindow(taskService) {
+        private void DeleteTaskMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            var deleteWindow = new DeleteTaskWindow(taskService)
+            {
                 Owner = this
             };
 
             // Відкриваємо діалог
-            if (deleteWindow.ShowDialog() == true) {
+            if (deleteWindow.ShowDialog() == true)
+            {
                 LoadTasks(); // якщо щось видалили — оновити таблицю
             }
         }
+
+        // 7
+        private void UpdateProgressMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            var progressWindow = new UpdateProgressWindow(taskService)
+            {
+                Owner = this
+            };
+
+            if (progressWindow.ShowDialog() == true)
+            {
+                LoadTasks();
+            }
+        }
+
+
     }
+
 }
