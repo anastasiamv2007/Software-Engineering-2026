@@ -8,7 +8,7 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
     public AppDbContext CreateDbContext(string[] args)
     {
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Default")
-            ?? "Host=localhost;Port=5432;Database=planora_db;Username=postgres;Password=CHANGE_ME";
+            ?? "Host=localhost;Port=5432;Database=planora_db;Username=postgres;Password=1234";
 
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql(connectionString)

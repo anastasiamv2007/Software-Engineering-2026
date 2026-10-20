@@ -6,6 +6,8 @@ public class TaskItem
 {
     public Guid Id { get; set; }
 
+    public Guid CreatorId { get; set; }
+
     public Guid ProjectId { get; set; }
 
     public string TaskCode { get; set; } = null!;

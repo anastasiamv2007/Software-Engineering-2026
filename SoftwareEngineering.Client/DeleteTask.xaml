@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:SoftwareEngineering.Client"
         mc:Ignorable="d"
         WindowStartupLocation="CenterScreen"
-        Title="Delete Task" Height="450" Width="800">
+        Title="Delete Task" Height="520" Width="800">
     <StackPanel Margin="30">
         <!-- Заголовок -->
         <TextBlock Text="Тестове вікно: Видалення завдання (Owner)" 
@@ -18,7 +18,7 @@
         <TextBlock Text="Перевірка бізнес-правила: лише Власник (Owner) може видалити таску." 
                    FontSize="12" 
                    Foreground="#A6ADC8" 
-                   Margin="0,0,0,25"/>
+                   Margin="0,0,0,20"/>
 
         <!-- Поле вводу Task ID -->
         <TextBlock Text="Task ID (Guid завдання):" Foreground="#CDD6F4" FontWeight="SemiBold" Margin="0,0,0,5"/>
@@ -42,8 +42,8 @@
                  FontSize="13"
                  Margin="0,0,0,20"/>
 
-        <!-- Кнопка тесту -->
-        <Button Content="Виконати Use Case: Видалити" 
+        <!-- Кнопка одногрупника (Use Case 4) -->
+        <Button Content="Видалити" 
                 Height="40" 
                 Background="#F38BA8" 
                 Foreground="#11111B" 
@@ -52,7 +52,19 @@
                 BorderThickness="0" 
                 Cursor="Hand"
                 Click="DeleteButton_Click"
-                Margin="0,0,0,20"/>
+                Margin="0,0,0,10"/>
+
+        <!-- Твоя кнопка (Use Case 5: Видалення спільного завдання) -->
+        <Button Content="Видалити спільне завдання" 
+                Height="40" 
+                Background="#89B4FA" 
+                Foreground="#11111B" 
+                FontWeight="Bold" 
+                FontSize="14" 
+                BorderThickness="0" 
+                Cursor="Hand"
+                Click="DeleteSharedTaskButton_Click"
+                Margin="0,0,0,15"/>
 
         <!-- Результат тесту -->
         <TextBlock Text="Результат виконання (Log / Status):" Foreground="#A6ADC8" Margin="0,0,0,5"/>
