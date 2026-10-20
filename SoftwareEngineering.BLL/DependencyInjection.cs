@@ -15,10 +15,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IDatabaseSetupService, DatabaseSetupService>();
         services.AddSingleton<IUserSession, UserSession>();
-
         services.AddScoped<IProjectService, ProjectService>();
-
-        // Реєстрація сервісів BLL для Use-Cases (приклад: services.AddScoped<IMyService, MyService>();)
         return services;
     }
 }
