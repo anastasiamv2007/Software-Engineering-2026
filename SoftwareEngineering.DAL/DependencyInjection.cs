@@ -13,6 +13,7 @@ public static class DependencyInjection
             .UseSnakeCaseNamingConvention());
 
         services.AddScoped<ITaskRepository, TaskRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
 
         services.AddScoped<IProjectRepository, ProjectRepository>();
 
