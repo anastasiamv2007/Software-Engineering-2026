@@ -62,16 +62,15 @@ namespace SoftwareEngineering.Client
         //3
         private void EditTaskMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            // Отримуємо вибране завдання з DataGrid
             if (TasksDataGrid.SelectedItem is SoftwareEngineering.BLL.Models.TaskModel selectedTask)
             {
-                // Відкриваємо твоє вікно редагування і передаємо туди сервіс та вибране завдання
-                var editWindow = new EditTaskWindow(taskService, selectedTask)
+                var currentUserId = Guid.Empty;
+
+                var editWindow = new EditTaskWindow(taskService, selectedTask, currentUserId)
                 {
                     Owner = this
                 };
 
-                // Якщо редагування пройшло успішно (користувач натиснув "Зберегти"), оновлюємо список
                 if (editWindow.ShowDialog() == true)
                 {
                     LoadTasks();

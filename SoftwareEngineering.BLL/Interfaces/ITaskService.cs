@@ -20,4 +20,7 @@ public interface ITaskService : IService
     // 4 delete task
     Task<TaskModel> DeleteTaskByOwnerAsync(TaskModel model, Guid currentUserId);
 
+    // 6
+    Task<TaskModel> UpdateDeadlineAsync(Guid taskId, DateTime? newDeadline, Guid currentUserId);
+
 }

@@ -361,6 +361,88 @@ public class TaskServiceTests
 
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
     }
+
+    // 6
+    [Fact]
+    public async Task UpdateDeadlineAsync_UserIsNotAssignee_UpdatesDeadlineAndCallsRepository()
+    {
+        // Arrange
+        var taskId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid(); 
+        var newDeadline = DateTime.UtcNow.AddDays(5); 
+
+        var existingEntity = new TaskItem
+        {
+            Id = taskId,
+            ProjectId = Guid.NewGuid(),
+            Title = "Спільне завдання",
+            AssigneeId = Guid.NewGuid(), 
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+
+        this.repositoryMock
+            .Setup(repository => repository.GetByIdAsync(taskId))
+            .ReturnsAsync(existingEntity);
+
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.UpdateDeadlineAsync(taskId, newDeadline, ownerId);
+
+        // Assert
+        Assert.NotNull(result);
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.Is<TaskItem>(
+            t => t.Id == taskId && t.Deadline == newDeadline)), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateDeadlineAsync_UserIsAssignee_ThrowsValidationException()
+    {
+        // Arrange
+        var taskId = Guid.NewGuid();
+        var assigneeId = Guid.NewGuid();
+        var newDeadline = DateTime.UtcNow.AddDays(5);
+
+        var existingEntity = new TaskItem
+        {
+            Id = taskId,
+            ProjectId = Guid.NewGuid(),
+            Title = "Спільне завдання",
+            AssigneeId = assigneeId, 
+            Deadline = DateTime.UtcNow.AddDays(1)
+        };
+
+        this.repositoryMock
+            .Setup(repository => repository.GetByIdAsync(taskId))
+            .ReturnsAsync(existingEntity);
+
+        var service = this.CreateService();
+
+        // Act and Assert
+        var exception = await Assert.ThrowsAsync<ValidationException>(() =>
+            service.UpdateDeadlineAsync(taskId, newDeadline, assigneeId));
+
+        Assert.Contains("лише власник завдання має право", exception.Message);
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateDeadlineAsync_DeadlineInPast_ThrowsValidationException()
+    {
+        // Arrange
+        var taskId = Guid.NewGuid();
+        var currentUserId = Guid.NewGuid();
+        var pastDeadline = DateTime.UtcNow.AddDays(-1); 
+
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            service.UpdateDeadlineAsync(taskId, pastDeadline, currentUserId));
+
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
+
     // 7
 
     [Theory]
