@@ -20,4 +20,8 @@ public interface ITaskService : IService
     // 4 delete task
     Task<TaskModel> DeleteTaskByOwnerAsync(TaskModel model, Guid currentUserId);
 
+    // 5
+
+    Task DeleteTaskAsync(Guid taskId, Guid currentUserId);
+
 }

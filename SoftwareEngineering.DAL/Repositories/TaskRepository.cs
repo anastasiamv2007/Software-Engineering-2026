@@ -6,6 +6,7 @@ namespace SoftwareEngineering.DAL.Repositories;
 public class TaskRepository : ITaskRepository
 {
     private readonly AppDbContext context;
+   
 
     public TaskRepository(AppDbContext context)
     {
@@ -42,4 +43,17 @@ public class TaskRepository : ITaskRepository
 
         await this.context.SaveChangesAsync();
     }
+
+    // 5
+
+    public async Task DeleteAsync(Guid id)
+    {
+        var task = await this.context.Tasks.FindAsync(id);
+        if (task != null)
+        {
+            this.context.Tasks.Remove(task);
+            await this.context.SaveChangesAsync();
+        }
+    }
+
 }
