@@ -6,6 +6,7 @@ using SoftwareEngineering.BLL;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Services;
 
+
 namespace SoftwareEngineering.Client;
 
 public partial class App : Application {
