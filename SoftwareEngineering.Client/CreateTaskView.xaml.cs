@@ -10,12 +10,14 @@ namespace SoftwareEngineering.Client
     public partial class CreateTaskView : Window
     {
         private readonly ITaskService taskService;
+        private readonly IProjectService projectService;
 
 
-        public CreateTaskView(ITaskService taskService)
+        public CreateTaskView(ITaskService taskService, IProjectService projectService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
+            this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
 
             DeadlineDatePicker.SelectedDate = DateTime.Now.AddDays(1);
         }
@@ -31,8 +33,11 @@ namespace SoftwareEngineering.Client
                     priority = parsedPriority;
                 }
 
+                var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty);
+
                 var taskModel = new TaskModel
                 {
+                    ProjectId = project.Id,
                     Title = TitleTextBox.Text?.Trim() ?? string.Empty,
                     Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
                     Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
