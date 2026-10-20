@@ -9,7 +9,7 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
     {
 
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql("Host=localhost;Port=5432;Database=planora_db;Username=postgres;Password=2007")
             .UseSnakeCaseNamingConvention()
             .Options;
 
