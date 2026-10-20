@@ -7,12 +7,14 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
 		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-		<UserSecretsId>b926f6d1-cd9b-4976-9981-d85f558f52f3</UserSecretsId>
+		<UserSecretsId>893a71a9-fa72-4333-920a-4b6c37506293</UserSecretsId>
 		
 	</PropertyGroup>
 
 	<ItemGroup>
 		<!-- Кодові аналізатори -->
+		<PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.1" />
 		<PackageReference Include="Roslynator.Analyzers" Version="4.12.9">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

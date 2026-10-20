@@ -6,12 +6,14 @@ namespace SoftwareEngineering.Client
     public partial class MainWindow : Window
     {
         private readonly ITaskService taskService;
+        private readonly IProjectService projectService;
 
         // Конструктор приймає сервіс через ін'єкцію залежностей (Dependency Injection)
-        public MainWindow(ITaskService taskService)
+        public MainWindow(ITaskService taskService, IProjectService projectService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
+            this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
 
             // Завантажуємо список завдань при запуску головного вікна
             LoadTasks();
@@ -20,7 +22,7 @@ namespace SoftwareEngineering.Client
         private void OpenCreateTaskWindow_Click(object sender, RoutedEventArgs e)
         {
             // Передаємо сервіс у вікно створення завдання
-            var createWindow = new CreateTaskView(taskService)
+            var createWindow = new CreateTaskView(taskService, projectService)
             {
                 Owner = this
             };
