@@ -1,40 +1,57 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using System;
+using System.IO;
+using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using SoftwareEngineering.BLL;
-using System.Windows;
+using SoftwareEngineering.BLL.Interfaces;
+using SoftwareEngineering.BLL.Services;
 
 
 namespace SoftwareEngineering.Client;
 
-public partial class App : Application
-{
-    private readonly ServiceProvider _serviceProvider;
+public partial class App : Application {
+    public IServiceProvider? ServiceProvider { get; private set; }
 
-    public App()
-    {
-        var services = new ServiceCollection();
-
-        var configuration = new ConfigurationBuilder()
-            .AddUserSecrets<App>()
-            .AddEnvironmentVariables()
-            .Build();
-
-        string connString = configuration.GetConnectionString("Default")
-            ?? throw new InvalidOperationException(
-                "Не знайдено рядок підключення 'ConnectionStrings:Default'. Додайте його через Manage User Secrets.");
-
-        services.AddBusinessLogic(connString);
-
-        services.AddTransient<MainWindow>();
-
-        _serviceProvider = services.BuildServiceProvider();
-    }
-
-    protected override void OnStartup(StartupEventArgs e)
-    {
+    protected override void OnStartup(StartupEventArgs e) {
         base.OnStartup(e);
 
-        var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
-        mainWindow.Show();
+        IDatabaseSetupService setupService = new DatabaseSetupService();
+        string? connectionString = setupService.GetSavedConnectionString();
+
+        if (string.IsNullOrWhiteSpace(connectionString)) {
+            // Хоста/бази ще немає — відкриваємо вікно налаштування бази
+            var setupWindow = new DatabaseSetupWindow(setupService);
+            setupWindow.Show();
+            return;
+        }
+
+        // Рядок є — піднімаємо повноцінний DI контейнер
+        ConfigureServices(connectionString);
+
+        var loginWindow = ServiceProvider!.GetRequiredService<LoginWindow>();
+        loginWindow.Show();
+    }
+
+    public void ConfigureServices(string connectionString) {
+        var services = new ServiceCollection();
+
+        // Реєстрація сервісів BLL і DAL
+        services.AddBusinessLogic(connectionString);
+
+        // Реєстрація вікон
+        services.AddTransient<LoginWindow>();
+        services.AddTransient<MainWindow>();
+        services.AddTransient<CreateTaskView>();
+        services.AddTransient<EditTaskWindow>();
+
+        ServiceProvider = services.BuildServiceProvider();
+    }
+
+    public T GetService<T>() where T : class {
+        if (ServiceProvider == null) {
+            throw new InvalidOperationException("Сервіси ще не ініціалізовані.");
+        }
+
+        return ServiceProvider.GetRequiredService<T>();
     }
 }
