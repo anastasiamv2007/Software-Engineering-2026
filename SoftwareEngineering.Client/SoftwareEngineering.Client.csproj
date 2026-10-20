@@ -7,6 +7,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
 		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<UserSecretsId>b926f6d1-cd9b-4976-9981-d85f558f52f3</UserSecretsId>
 		
 	</PropertyGroup>
 
