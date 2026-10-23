@@ -12,6 +12,7 @@ public class TaskRepository : ITaskRepository
         this.context = context;
     }
 
+
     public async Task<int> CountByProjectAsync(Guid projectId)
     {
         return await this.context.Tasks.CountAsync(task => task.ProjectId == projectId);
@@ -21,6 +22,11 @@ public class TaskRepository : ITaskRepository
     {
         this.context.Tasks.Add(task);
         await this.context.SaveChangesAsync();
+    }
+
+    public async Task<IEnumerable<TaskItem>> GetAsync()
+    {
+        return await this.context.Tasks.ToListAsync();
     }
 
     // 2

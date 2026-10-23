@@ -18,6 +18,15 @@ public class TaskService : BaseService, ITaskService
         this.taskRepository = taskRepository;
     }
 
+    public async Task<IReadOnlyList<TaskModel>> GetAllAsync()
+    {
+        return await this.ExecuteWithLoggingAsync("Отримання списку всіх завдань", async () =>
+        {
+            var entities = await this.taskRepository.GetAsync(); // Виправлено назву методу репозиторію
+            return entities.Select(ToModel).ToList().AsReadOnly();
+        });
+    }
+
     public async Task<TaskModel> CreateAsync(TaskModel model)
     {
         this.ValidateNewTask(model);
