@@ -1,24 +1,25 @@
-﻿using System;
-using System.IO;
-using System.Windows;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using SoftwareEngineering.BLL;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Services;
+using System.Windows;
 
 
 namespace SoftwareEngineering.Client;
 
-public partial class App : Application {
+public partial class App : Application
+{
     public IServiceProvider? ServiceProvider { get; private set; }
 
-    protected override void OnStartup(StartupEventArgs e) {
+    protected override void OnStartup(StartupEventArgs e)
+    {
         base.OnStartup(e);
 
         IDatabaseSetupService setupService = new DatabaseSetupService();
         string? connectionString = setupService.GetSavedConnectionString();
 
-        if (string.IsNullOrWhiteSpace(connectionString)) {
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
             // Хоста/бази ще немає — відкриваємо вікно налаштування бази
             var setupWindow = new DatabaseSetupWindow(setupService);
             setupWindow.Show();
@@ -32,7 +33,8 @@ public partial class App : Application {
         loginWindow.Show();
     }
 
-    public void ConfigureServices(string connectionString) {
+    public void ConfigureServices(string connectionString)
+    {
         var services = new ServiceCollection();
 
         // Реєстрація сервісів BLL і DAL
@@ -41,14 +43,15 @@ public partial class App : Application {
         // Реєстрація вікон
         services.AddTransient<LoginWindow>();
         services.AddTransient<MainWindow>();
-        services.AddTransient<CreateTaskView>();
-        services.AddTransient<EditTaskWindow>();
+
 
         ServiceProvider = services.BuildServiceProvider();
     }
 
-    public T GetService<T>() where T : class {
-        if (ServiceProvider == null) {
+    public T GetService<T>() where T : class
+    {
+        if (ServiceProvider == null)
+        {
             throw new InvalidOperationException("Сервіси ще не ініціалізовані.");
         }
 

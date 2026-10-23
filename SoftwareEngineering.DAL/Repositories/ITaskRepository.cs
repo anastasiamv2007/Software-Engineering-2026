@@ -8,6 +8,7 @@ public interface ITaskRepository
 
     Task AddAsync(TaskItem task);
 
+    Task<IEnumerable<TaskItem>> GetAsync();
 
     // 2
     Task<TaskItem?> GetByIdAsync(Guid id);
