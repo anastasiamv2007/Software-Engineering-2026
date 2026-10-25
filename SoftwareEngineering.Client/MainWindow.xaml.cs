@@ -1,4 +1,4 @@
-﻿using Serilog;
+using Serilog;
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
@@ -170,6 +170,28 @@ namespace SoftwareEngineering.Client
             else
             {
                 MessageBox.Show("Виберіть завдання зі списку.", "Увага", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        private async void EditTaskMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (TasksDataGrid.SelectedItem is TaskModel selectedTask)
+            {
+                var currentUserId = Guid.Empty;
+
+                var editWindow = new EditTaskWindow(taskService, selectedTask, currentUserId)
+                {
+                    Owner = this
+                };
+
+                if (editWindow.ShowDialog() == true)
+                {
+                    await LoadTasksAsync();
+                }
+            }
+            else
+            {
+                MessageBox.Show("Виберіть завдання для редагування.", "Увага", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 

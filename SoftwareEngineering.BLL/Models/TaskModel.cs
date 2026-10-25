@@ -19,4 +19,6 @@ public class TaskModel : BaseModel
     public int? CategoryId { get; set; }
 
     public TaskItemStatus Status { get; set; } = TaskItemStatus.Todo;
+
+    public Guid OwnerId { get; set; }
 }

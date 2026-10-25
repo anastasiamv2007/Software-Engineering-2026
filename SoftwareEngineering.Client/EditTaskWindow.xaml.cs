@@ -14,7 +14,7 @@ namespace SoftwareEngineering.Client
         private readonly ITaskService taskService;
         private readonly TaskModel currentTask;
 
-        public EditTaskWindow(ITaskService taskService, TaskModel taskToEdit)
+        public EditTaskWindow(ITaskService taskService, TaskModel taskToEdit, Guid currentUserId)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
@@ -31,6 +31,12 @@ namespace SoftwareEngineering.Client
                     PriorityComboBox.SelectedItem = item;
                     break;
                 }
+            }
+            // ПЕРЕВІРКА ПРАВ ДЛЯ USE-CASE #6
+            if (currentTask.OwnerId != currentUserId)
+            {
+                DeadlineDatePicker.IsEnabled = false;
+                DeadlineDatePicker.ToolTip = "Лише власник завдання може змінювати дедлайн.";
             }
         }
 

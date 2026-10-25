@@ -6,6 +6,8 @@ public class TaskItem
 {
     public Guid Id { get; set; }
 
+    public Guid CreatorId { get; set; }
+
     public Guid ProjectId { get; set; }
 
     public string TaskCode { get; set; } = null!;
@@ -39,4 +41,6 @@ public class TaskItem
     public ICollection<Comment> Comments { get; set; } = new List<Comment>();
 
     public ICollection<ActivityLog> ActivityLogs { get; set; } = new List<ActivityLog>();
+
+    public Guid OwnerId { get; set; }
 }

@@ -12,6 +12,7 @@ public class TaskService : BaseService, ITaskService
     private const string TaskCodePrefix = "PL-";
 
     private readonly ITaskRepository taskRepository;
+    
 
     public TaskService(ITaskRepository taskRepository)
     {
@@ -93,6 +94,59 @@ public class TaskService : BaseService, ITaskService
             return true;
         });
         return model;
+    }
+
+    // 5
+    public async Task DeleteTaskAsync(Guid taskId, Guid currentUserId)
+    {
+        
+        var task = await this.taskRepository.GetByIdAsync(taskId);
+
+        if (task == null)
+        {
+            throw new Exception("Завдання не знайдено або вже було видалено.");
+        }
+
+        if (task.CreatorId != currentUserId)
+        {
+            throw new Exception("У вас немає прав на видалення. Лише власник завдання може його повністю вилучити.");
+        }
+
+        await this.taskRepository.DeleteAsync(taskId);
+    }
+
+    // 6
+    public async Task<TaskModel> UpdateDeadlineAsync(Guid taskId, DateTime? newDeadline, Guid currentUserId)
+    {
+        return await this.ExecuteWithLoggingAsync("Редагування дедлайну спільного завдання", async () =>
+        {
+            this.ValidateCondition(taskId != Guid.Empty, "Ідентифікатор завдання не вказано.");
+            this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор користувача не вказано.");
+            this.ValidateCondition(newDeadline.HasValue, "Дедлайн не може бути порожнім.");
+            this.ValidateCondition(newDeadline!.Value.ToUniversalTime() > DateTime.UtcNow, "Дедлайн не може бути в минулому.");
+
+            var entity = await this.taskRepository.GetByIdAsync(taskId);
+            this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+
+            // Обмежена дія: лише власник має право змінювати дедлайн спільної задачі
+            this.ValidateCondition(
+                entity!.AssigneeId != currentUserId,
+                "Обмежена дія: лише власник завдання має право змінювати дедлайн спільної задачі.");
+
+            var oldDeadline = entity.Deadline;
+            entity.Deadline = newDeadline.Value.ToUniversalTime();
+
+            await this.taskRepository.UpdateAsync(entity);
+
+            this.Logger.Information(
+                "Власник {UserId} змінив дедлайн спільного завдання {TaskId} з {OldDeadline} на {NewDeadline}",
+                currentUserId,
+                taskId,
+                oldDeadline,
+                entity.Deadline);
+
+            return ToModel(entity);
+        });
     }
 
     // 7

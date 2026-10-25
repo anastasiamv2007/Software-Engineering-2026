@@ -18,4 +18,7 @@ public interface ITaskRepository
 
     Task DeleteAsync(TaskItem entity);
 
+    // 5
+    Task DeleteAsync(Guid id);
+
 }
