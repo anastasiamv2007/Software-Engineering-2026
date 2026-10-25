@@ -241,6 +241,10 @@ namespace SoftwareEngineering.DAL.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<Guid>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creator_id");
+
                     b.Property<DateTime?>("Deadline")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deadline");

@@ -523,4 +523,70 @@ public class TaskServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, userId));
     }
+
+    // 5
+
+    [Fact]
+    public async Task DeleteTaskAsync_UserIsOwner_DeletesSuccessfully()
+    {
+        // Arrange
+        var taskId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var task = new TaskItem { Id = taskId, CreatorId = ownerId };
+
+        var mockRepo = new Mock<ITaskRepository>();
+        mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ReturnsAsync(task);
+
+        var taskService = new TaskService(mockRepo.Object);
+
+        // Act
+        await taskService.DeleteTaskAsync(taskId, ownerId);
+
+        // Assert
+        mockRepo.Verify(repo => repo.DeleteAsync(taskId), Times.Once);
+    }
+
+    // Тест 2: Помилка доступу (користувач НЕ є творцем завдання)
+    [Fact]
+    public async Task DeleteTaskAsync_UserIsNotOwner_ThrowsException()
+    {
+        // Arrange
+        var taskId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var strangerId = Guid.NewGuid(); // Інший користувач
+        var task = new TaskItem { Id = taskId, CreatorId = ownerId };
+
+        var mockRepo = new Mock<ITaskRepository>();
+        mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ReturnsAsync(task);
+
+        var taskService = new TaskService(mockRepo.Object);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<Exception>(() =>
+            taskService.DeleteTaskAsync(taskId, strangerId));
+
+        mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    // Тест 3: Завдання не знайдено в базі
+    [Fact]
+    public async Task DeleteTaskAsync_TaskDoesNotExist_ThrowsException()
+    {
+        // Arrange
+        var taskId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        var mockRepo = new Mock<ITaskRepository>();
+
+        // Виправлено: додано знак питання (TaskItem?) для Nullable типів
+        mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ReturnsAsync((TaskItem?)null);
+
+        var taskService = new TaskService(mockRepo.Object);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<Exception>(() =>
+            taskService.DeleteTaskAsync(taskId, userId));
+
+        mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
+    }
 }
