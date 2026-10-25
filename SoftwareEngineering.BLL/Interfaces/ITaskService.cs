@@ -5,6 +5,7 @@ namespace SoftwareEngineering.BLL.Interfaces;
 
 public interface ITaskService : IService
 {
+    Task<IReadOnlyList<TaskModel>> GetAllAsync();
     Task<TaskModel> CreateAsync(TaskModel model);
 
 
