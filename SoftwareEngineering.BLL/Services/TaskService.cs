@@ -12,6 +12,7 @@ public class TaskService : BaseService, ITaskService
     private const string TaskCodePrefix = "PL-";
 
     private readonly ITaskRepository taskRepository;
+    
 
     public TaskService(ITaskRepository taskRepository)
     {
@@ -84,6 +85,25 @@ public class TaskService : BaseService, ITaskService
             return true;
         });
         return model;
+    }
+
+    // 5
+    public async Task DeleteTaskAsync(Guid taskId, Guid currentUserId)
+    {
+        
+        var task = await this.taskRepository.GetByIdAsync(taskId);
+
+        if (task == null)
+        {
+            throw new Exception("Завдання не знайдено або вже було видалено.");
+        }
+
+        if (task.CreatorId != currentUserId)
+        {
+            throw new Exception("У вас немає прав на видалення. Лише власник завдання може його повністю вилучити.");
+        }
+
+        await this.taskRepository.DeleteAsync(taskId);
     }
 
     // 6

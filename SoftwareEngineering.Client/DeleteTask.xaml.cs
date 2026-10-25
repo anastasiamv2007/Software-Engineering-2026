@@ -16,55 +16,91 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 
-namespace SoftwareEngineering.Client {
-    public partial class DeleteTaskWindow : Window {
+namespace SoftwareEngineering.Client
+{
+    public partial class DeleteTaskWindow : Window
+    {
         private readonly ITaskService _taskService;
 
-        // Отримує сервіс
-        public DeleteTaskWindow(ITaskService taskService) {
+        public DeleteTaskWindow(ITaskService taskService)
+        {
             InitializeComponent();
             _taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
         }
 
-        private async void DeleteButton_Click(object sender, RoutedEventArgs e) {
-            StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(186, 194, 222));
-            StatusTextBlock.Text = "Виконується запит...";
 
-            // 1. Зчитуємо TaskId
-            if (!Guid.TryParse(TaskIdTextBox.Text.Trim(), out Guid taskId)) {
+        // Use Case 4
+
+        private async void DeleteButton_Click(object sender, RoutedEventArgs e)
+        {
+            StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(186, 194, 222));
+            StatusTextBlock.Text = "Виконується запит (UC 4)...";
+
+            if (!Guid.TryParse(TaskIdTextBox.Text.Trim(), out Guid taskId))
+            {
                 SetError("Помилка вводу: Task ID має бути валідним Guid (наприклад: 3fa85f64-5717-4562-b3fc-2c963f66afa6)");
                 return;
             }
 
-            // 2. Зчитуємо UserId
-            if (!Guid.TryParse(UserIdTextBox.Text.Trim(), out Guid userId)) {
+            if (!Guid.TryParse(UserIdTextBox.Text.Trim(), out Guid userId))
+            {
                 SetError("Помилка вводу: User ID має бути валідним Guid.");
                 return;
             }
 
-            try {
-                // Створюємо мінімальну модель з цим ID
+            try
+            {
                 var model = new TaskModel { Id = taskId };
-
-                // 3. Викликаємо твій сервіс
                 await _taskService.DeleteTaskByOwnerAsync(model, userId);
 
-                // Якщо дійшло сюди і не впало — успіх!
                 StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(166, 227, 161)); // Зелений
-                StatusTextBlock.Text = $"[УСПІХ]: Завдання {taskId} успішно видалено користувачем {userId}!";
+                StatusTextBlock.Text = $"[УСПІХ UC 4]: Завдання {taskId} успішно видалено користувачем {userId}!";
             }
-            catch (ValidationException valEx) {
-                // Якщо спрацювала бізнес-перевірка (наприклад, юзер не Owner)
+            catch (ValidationException valEx)
+            {
                 SetError($"[ВІДХИЛЕНО BLL ВАЛІДАЦІЄЮ]: {valEx.Message}");
             }
-            catch (Exception ex) {
-                // Інші помилки (наприклад, впала база)
+            catch (Exception ex)
+            {
                 SetError($"[СИСТЕМНА ПОМИЛКА]: {ex.Message}");
             }
         }
 
-        private void SetError(string message) {
-            StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(243, 139, 168)); // Червоний
+        // Use Case 5
+      
+        private async void DeleteSharedTaskButton_Click(object sender, RoutedEventArgs e)
+        {
+            StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(186, 194, 222));
+            StatusTextBlock.Text = "Виконується запит (Use Case 5)...";
+
+            if (!Guid.TryParse(TaskIdTextBox.Text.Trim(), out Guid taskId))
+            {
+                SetError("Помилка вводу: Task ID має бути валідним Guid.");
+                return;
+            }
+
+            if (!Guid.TryParse(UserIdTextBox.Text.Trim(), out Guid userId))
+            {
+                SetError("Помилка вводу: User ID має бути валідним Guid.");
+                return;
+            }
+
+            try
+            {
+                await _taskService.DeleteTaskAsync(taskId, userId);
+
+                StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(166, 227, 161));
+                StatusTextBlock.Text = $"[УСПІХ UC 5]: Спільне завдання {taskId} успішно видалено власником {userId}!";
+            }
+            catch (Exception ex)
+            {
+                SetError($"[ВІДМОВА ДОСТУПУ (UC 5)]: {ex.Message}");
+            }
+        }
+
+        private void SetError(string message)
+        {
+            StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(243, 139, 168));
             StatusTextBlock.Text = message;
         }
     }
