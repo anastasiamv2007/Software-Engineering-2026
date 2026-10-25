@@ -41,4 +41,6 @@ public class TaskItem
     public ICollection<Comment> Comments { get; set; } = new List<Comment>();
 
     public ICollection<ActivityLog> ActivityLogs { get; set; } = new List<ActivityLog>();
+
+    public Guid OwnerId { get; set; }
 }
