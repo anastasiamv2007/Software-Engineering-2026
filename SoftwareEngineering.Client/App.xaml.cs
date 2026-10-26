@@ -4,7 +4,6 @@ using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Services;
 using System.Windows;
 
-
 namespace SoftwareEngineering.Client;
 
 public partial class App : Application
@@ -40,10 +39,12 @@ public partial class App : Application
         // Реєстрація сервісів BLL і DAL
         services.AddBusinessLogic(connectionString);
 
+        services.AddSingleton<UserSession>();
+        services.AddSingleton<IUserSession>(sp => sp.GetRequiredService<UserSession>());
+
         // Реєстрація вікон
         services.AddTransient<LoginWindow>();
         services.AddTransient<MainWindow>();
-
 
         ServiceProvider = services.BuildServiceProvider();
     }
