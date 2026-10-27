@@ -25,6 +25,7 @@ namespace SoftwareEngineering.Client
 
             // Поточний користувач береться із сесії, а не вводиться вручну
             UserNameText.Text = userSession.CurrentUser?.FullName ?? "Користувач";
+            UserInitialsText.Text = GetInitials(userSession.CurrentUser?.FullName);
             ProgUserIdTextBox.Text = CurrentUserId.ToString();
             ProgUserIdTextBox.IsReadOnly = true;
             DelUserIdTextBox.Text = CurrentUserId.ToString();
@@ -36,15 +37,29 @@ namespace SoftwareEngineering.Client
 
         private Guid CurrentUserId => userSession.CurrentUserId ?? Guid.Empty;
 
-        // Готові обробники для кнопок виходу — прив'яжіть у XAML через Click="SignOut_Click" / Click="SignOutAndDisconnect_Click"
+        // "Іван Петренко" -> "ІП"; логування виходу вже є всередині App.SignOut / SignOutAndDisconnect
+        private static string GetInitials(string? fullName)
+        {
+            var parts = (fullName ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length == 0 ? "?" : string.Concat(parts.Take(2).Select(part => char.ToUpperInvariant(part[0])));
+        }
+
         private void SignOut_Click(object sender, RoutedEventArgs e)
         {
-            ((App)Application.Current).SignOut();
+            var result = MessageBox.Show("Ви дійсно хочете вийти з облікового запису?", "Вихід", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                ((App)Application.Current).SignOut();
+            }
         }
 
         private void SignOutAndDisconnect_Click(object sender, RoutedEventArgs e)
         {
-            ((App)Application.Current).SignOutAndDisconnect();
+            var result = MessageBox.Show("Вийти з облікового запису та обрати іншу базу даних?", "Змінити базу", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                ((App)Application.Current).SignOutAndDisconnect();
+            }
         }
 
         // DatePicker повертає лише дату — якщо день не змінився, лишаємо початковий дедлайн разом із часом

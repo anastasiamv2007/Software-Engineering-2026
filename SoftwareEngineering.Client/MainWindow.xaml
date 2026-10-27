@@ -116,7 +116,23 @@
 
                 <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom" Margin="0,0,0,16">
                     <RadioButton Style="{StaticResource NavButton}" GroupName="Nav" Tag="Settings" Content="⚙  Налаштування" Click="Nav_Click"/>
-                    <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" Margin="26,14,12,0"/>
+                    <!-- Панель керування акаунтом -->
+                    <Border Margin="16,12,16,0" Padding="10" Background="#1E293B" CornerRadius="8">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Border CornerRadius="16" Width="32" Height="32" Background="#3B82F6" Margin="0,0,10,0">
+                                    <TextBlock x:Name="UserInitialsText" Text="?" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" FontSize="12"/>
+                                    <TextBlock Text="Активна сесія" Foreground="#64748B" FontSize="10"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Button Content="Вийти" Style="{StaticResource DangerButton}" FontSize="11" Padding="4,6" Margin="0,0,0,4" Click="SignOut_Click" ToolTip="Вийти з поточного облікового запису"/>
+                            <Button Content="Змінити базу" Style="{StaticResource SecondaryButton}" FontSize="11" Padding="4,6" Click="SignOutAndDisconnect_Click" ToolTip="Вийти та обрати інше підключення до бази даних"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </DockPanel>
         </Border>
