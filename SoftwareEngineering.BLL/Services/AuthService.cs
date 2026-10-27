@@ -44,7 +44,6 @@ public class AuthService : IAuthService {
 
         try {
             await _userRepository.AddAsync(user, cancellationToken);
-            await _userRepository.SaveChangesAsync(cancellationToken);
         }
         catch (Exception ex) {
             Logger.Error(ex, "Помилка БД під час реєстрації користувача {Email}", normalizedEmail);
