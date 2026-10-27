@@ -69,6 +69,11 @@ namespace SoftwareEngineering.Client
             {
                 element.Visibility = element.Name == $"Page_{page}" ? Visibility.Visible : Visibility.Collapsed;
             }
+
+            if (page == "Projects")
+            {
+                var projectsView = Page_Projects.Children.OfType<ProjectsView>().FirstOrDefault();
+            }
         }
 
         private void CancelToTasks_Click(object sender, RoutedEventArgs e)
