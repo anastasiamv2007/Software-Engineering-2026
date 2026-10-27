@@ -348,5 +348,31 @@ namespace SoftwareEngineering.Client
                 DelStatusText.Text = $"[ПОМИЛКА]: {ex.Message}";
             }
         }
+
+        private void LogoutButton_Click(object sender, RoutedEventArgs e)
+        {
+            var result = MessageBox.Show("Ви дійсно хочете вийти з аккаунта?", "Вихід", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                // Логування події виходу в Seq
+                Log.Information("Користувач вийшов із системи о {Time}", DateTime.UtcNow);
+
+                var loginWindow = ((App)Application.Current).GetService<LoginWindow>();
+                loginWindow.Show();
+                this.Close();
+            }
+        }
+
+        private void RegisterNewAccountButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Логування переходу до реєстрації в Seq
+            Log.Information("Користувач ініціював створення нового аккаунта.");
+
+            var loginWindow = ((App)Application.Current).GetService<LoginWindow>();
+            loginWindow.Show();
+            this.Close();
+        }
+
     }
+
 }
