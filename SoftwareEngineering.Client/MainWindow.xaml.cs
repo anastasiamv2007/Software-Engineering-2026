@@ -33,6 +33,18 @@ namespace SoftwareEngineering.Client
             DeadlineDatePicker.SelectedDate = DateTime.Now.AddDays(1);
             Loaded += async (_, _) => await LoadTasksAsync();
         }
+        
+        /// <summary>
+    
+        private void TasksDataGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Перевіряємо, чи клікнули саме по завданню
+            if (TasksDataGrid.SelectedItem is TaskModel)
+            {
+                // Викликаємо твою готову логіку кнопки "Деталі"
+                GoToDetails_Click(sender, new RoutedEventArgs());
+            }
+        }
 
         private Guid CurrentUserId => userSession.CurrentUserId ?? Guid.Empty;
 

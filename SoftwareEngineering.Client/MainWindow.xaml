@@ -218,7 +218,7 @@
                 </DockPanel>
 
                 <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
-                    <DataGrid x:Name="TasksDataGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
+                    <DataGrid x:Name="TasksDataGrid" MouseDoubleClick="TasksDataGrid_MouseDoubleClick" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="0"
                               Background="White" RowHeight="48" CanUserAddRows="False">
                         <DataGrid.Columns>
