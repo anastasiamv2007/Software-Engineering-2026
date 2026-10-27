@@ -4,5 +4,5 @@ namespace SoftwareEngineering.BLL.Interfaces;
 
 public interface IProjectService : IService
 {
-    Task<ProjectModel> GetOrCreateByNameAsync(string name);
+    Task<ProjectModel> GetOrCreateByNameAsync(string name, Guid ownerId);
 }

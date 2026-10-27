@@ -11,13 +11,14 @@ namespace SoftwareEngineering.Client
     {
         private readonly ITaskService taskService;
         private readonly IProjectService projectService;
+        private readonly IUserSession userSession;
 
-
-        public CreateTaskView(ITaskService taskService, IProjectService projectService)
+        public CreateTaskView(ITaskService taskService, IProjectService projectService, IUserSession userSession)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
+            this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
 
             DeadlineDatePicker.SelectedDate = DateTime.Now.AddDays(1);
         }
@@ -33,11 +34,13 @@ namespace SoftwareEngineering.Client
                     priority = parsedPriority;
                 }
 
-                var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty);
+                var ownerId = userSession.CurrentUserId ?? Guid.Empty;
+                var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty, ownerId);
 
                 var taskModel = new TaskModel
                 {
                     ProjectId = project.Id,
+                    OwnerId = ownerId,
                     Title = TitleTextBox.Text?.Trim() ?? string.Empty,
                     Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
                     Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
