@@ -21,4 +21,6 @@ public interface ITaskRepository
     // 5
     Task DeleteAsync(Guid id);
 
+    //
+    Task<IEnumerable<TaskItem>> GetTasksByProjectIdAsync(Guid projectId);
 }

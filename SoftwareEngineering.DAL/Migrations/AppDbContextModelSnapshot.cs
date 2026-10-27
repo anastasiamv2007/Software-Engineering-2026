@@ -253,6 +253,10 @@ namespace SoftwareEngineering.DAL.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasMaxLength(20)

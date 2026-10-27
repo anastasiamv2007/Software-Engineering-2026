@@ -21,11 +21,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
 
-    //protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    //{
-    //    // Примусово підключаємося до локальної бази planora_db
-    //    optionsBuilder.UseNpgsql("Host=localhost;Port=5432;Database=planora_db;Username=postgres;Password=0297");
-    //}
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        // Примусово підключаємося до локальної бази planora_db
+        optionsBuilder.UseNpgsql("Host=localhost;Port=5432;Database=planora_db;Username=postgres;Password=1234");
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -6,6 +6,8 @@ public class TaskModel : BaseModel
 {
     public Guid ProjectId { get; set; }
 
+    public Guid CreatorId { get; set; }
+
     public string TaskCode { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;

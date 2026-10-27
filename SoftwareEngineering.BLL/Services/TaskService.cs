@@ -12,7 +12,6 @@ public class TaskService : BaseService, ITaskService
     private const string TaskCodePrefix = "PL-";
 
     private readonly ITaskRepository taskRepository;
-    
 
     public TaskService(ITaskRepository taskRepository)
     {
@@ -23,7 +22,7 @@ public class TaskService : BaseService, ITaskService
     {
         return await this.ExecuteWithLoggingAsync("Отримання списку всіх завдань", async () =>
         {
-            var entities = await this.taskRepository.GetAsync(); // Виправлено назву методу репозиторію
+            var entities = await this.taskRepository.GetAsync();
             return entities.Select(ToModel).ToList().AsReadOnly();
         });
     }
@@ -41,22 +40,17 @@ public class TaskService : BaseService, ITaskService
         });
     }
 
-    // 2
     public async Task<TaskModel> GetByIdAsync(Guid id)
     {
         return await this.ExecuteWithLoggingAsync("Перегляд деталей завдання", async () =>
         {
             this.ValidateCondition(id != Guid.Empty, "Ідентифікатор завдання не може бути порожнім.");
-
             var entity = await this.taskRepository.GetByIdAsync(id);
-
             this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
-
             return ToModel(entity!);
         });
     }
 
-    // 3
     public async Task<TaskModel> UpdateAsync(TaskModel model)
     {
         return await this.ExecuteWithLoggingAsync("Редагування завдання", async () =>
@@ -83,12 +77,8 @@ public class TaskService : BaseService, ITaskService
         await this.ExecuteWithLoggingAsync("Видалення завдання", async () =>
         {
             this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор завдання не вказано.");
-
             var entity = await this.taskRepository.GetByIdAsync(currentUserId);
             this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
-
-            // Місце під Activity Log / перевірку прав
-            // ...
 
             await this.taskRepository.DeleteAsync(entity!);
             return true;
@@ -96,10 +86,8 @@ public class TaskService : BaseService, ITaskService
         return model;
     }
 
-    // 5
     public async Task DeleteTaskAsync(Guid taskId, Guid currentUserId)
     {
-        
         var task = await this.taskRepository.GetByIdAsync(taskId);
 
         if (task == null)
@@ -107,7 +95,8 @@ public class TaskService : BaseService, ITaskService
             throw new Exception("Завдання не знайдено або вже було видалено.");
         }
 
-        if (task.CreatorId != currentUserId)
+        // Дозволяємо видалення, якщо користувач є автором АБО якщо таска стара (CreatorId порожній)
+        if (task.CreatorId != Guid.Empty && task.CreatorId != currentUserId)
         {
             throw new Exception("У вас немає прав на видалення. Лише власник завдання може його повністю вилучити.");
         }
@@ -115,7 +104,6 @@ public class TaskService : BaseService, ITaskService
         await this.taskRepository.DeleteAsync(taskId);
     }
 
-    // 6
     public async Task<TaskModel> UpdateDeadlineAsync(Guid taskId, DateTime? newDeadline, Guid currentUserId)
     {
         return await this.ExecuteWithLoggingAsync("Редагування дедлайну спільного завдання", async () =>
@@ -128,7 +116,6 @@ public class TaskService : BaseService, ITaskService
             var entity = await this.taskRepository.GetByIdAsync(taskId);
             this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
 
-            // Обмежена дія: лише власник має право змінювати дедлайн спільної задачі
             this.ValidateCondition(
                 entity!.AssigneeId != currentUserId,
                 "Обмежена дія: лише власник завдання має право змінювати дедлайн спільної задачі.");
@@ -140,16 +127,12 @@ public class TaskService : BaseService, ITaskService
 
             this.Logger.Information(
                 "Власник {UserId} змінив дедлайн спільного завдання {TaskId} з {OldDeadline} на {NewDeadline}",
-                currentUserId,
-                taskId,
-                oldDeadline,
-                entity.Deadline);
+                currentUserId, taskId, oldDeadline, entity.Deadline);
 
             return ToModel(entity);
         });
     }
 
-    // 7
     public async Task<TaskModel> UpdateProgressAsync(Guid taskId, TaskItemStatus newStatus, Guid currentUserId)
     {
         return await this.ExecuteWithLoggingAsync("Оновлення прогресу завдання", async () =>
@@ -172,13 +155,16 @@ public class TaskService : BaseService, ITaskService
 
             this.Logger.Information(
                 "Користувач {UserId} змінив статус завдання {TaskId} з {OldStatus} на {NewStatus}",
-                currentUserId,
-                taskId,
-                oldStatus,
-                newStatus);
+                currentUserId, taskId, oldStatus, newStatus);
 
             return ToModel(entity);
         });
+    }
+
+    public async Task<IEnumerable<TaskModel>> GetTasksByProjectIdAsync(Guid projectId)
+    {
+        var tasks = await this.taskRepository.GetTasksByProjectIdAsync(projectId);
+        return tasks.Select(ToModel);
     }
 
     private static TaskModel ToModel(TaskItem entity)
@@ -187,6 +173,7 @@ public class TaskService : BaseService, ITaskService
         {
             Id = entity.Id,
             ProjectId = entity.ProjectId,
+            CreatorId = entity.CreatorId,
             TaskCode = entity.TaskCode,
             Title = entity.Title,
             Description = entity.Description,
@@ -228,6 +215,7 @@ public class TaskService : BaseService, ITaskService
         {
             Id = Guid.NewGuid(),
             ProjectId = model.ProjectId,
+            CreatorId = model.CreatorId,
             TaskCode = $"{TaskCodePrefix}{tasksInProject + 1}",
             Title = model.Title.Trim(),
             Description = model.Description,

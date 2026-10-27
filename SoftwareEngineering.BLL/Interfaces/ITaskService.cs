@@ -28,4 +28,6 @@ public interface ITaskService : IService
     // 6
     Task<TaskModel> UpdateDeadlineAsync(Guid taskId, DateTime? newDeadline, Guid currentUserId);
 
+    //
+    Task<IEnumerable<TaskModel>> GetTasksByProjectIdAsync(Guid projectId);
 }

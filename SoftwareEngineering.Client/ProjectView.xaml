@@ -56,13 +56,59 @@
                     <TextBox x:Name="TxtProjectName" Height="36" VerticalContentAlignment="Center" Padding="8,0" FontSize="14"/>
                 </StackPanel>
 
-                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,20">
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,15">
                     <TextBlock Text="Кількість тасків: " Foreground="#7F8C8D"/>
                     <TextBlock x:Name="TxtTasksCount" Text="0" FontWeight="Bold" Foreground="#2C3E50" Margin="5,0,20,0"/>
 
                     <TextBlock Text="Створено: " Foreground="#7F8C8D"/>
                     <TextBlock x:Name="TxtCreatedAt" Text="-" FontWeight="Bold" Foreground="#2C3E50" Margin="5,0,0,0"/>
                 </StackPanel>
+
+                <!-- ПАНЕЛЬ ЗАВДАНЬ -->
+                <Grid Grid.Row="3" x:Name="TaskSection" Margin="0,10,0,20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="Завдання проєкту:" FontWeight="Bold" FontSize="16" Foreground="#2C3E50" Margin="0,0,0,10"/>
+
+                    <!-- Швидке додавання таски -->
+                    <Grid Grid.Row="1" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtNewTaskTitle" Height="34" Padding="8,0" VerticalContentAlignment="Center" FontSize="13" />
+                        <Button Grid.Column="1" x:Name="BtnCreateTask" Content="+ Додати" Width="90" Height="34" Margin="10,0,0,0"
+                                Background="#27AE60" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BtnCreateTask_Click"/>
+                    </Grid>
+
+                    <!-- Список тасок -->
+                    <ListBox Grid.Row="2" x:Name="LstTasks" BorderThickness="1" BorderBrush="#E0E0E0" 
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="5,8" Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ScrollContentPresenter}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Deadline, StringFormat=dd.MM.yyyy}" Foreground="#7F8C8D" FontSize="12" Margin="0,2,0,0"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1" Content="🗑" Width="30" Height="30" Margin="10,0,10,0"
+                                            Background="Transparent" Foreground="#E74C3C" BorderThickness="0" Cursor="Hand" FontSize="16"
+                                            Tag="{Binding Id}" Click="BtnDeleteTask_Click"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
 
                 <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="BtnDelete" Content="Видалити" Width="100" Height="36" 

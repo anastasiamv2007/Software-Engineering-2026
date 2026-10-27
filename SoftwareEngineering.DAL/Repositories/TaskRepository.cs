@@ -6,13 +6,11 @@ namespace SoftwareEngineering.DAL.Repositories;
 public class TaskRepository : ITaskRepository
 {
     private readonly AppDbContext context;
-   
 
     public TaskRepository(AppDbContext context)
     {
         this.context = context;
     }
-
 
     public async Task<int> CountByProjectAsync(Guid projectId)
     {
@@ -46,12 +44,10 @@ public class TaskRepository : ITaskRepository
     public async Task DeleteAsync(TaskItem entity)
     {
         this.context.Tasks.Remove(entity);
-
         await this.context.SaveChangesAsync();
     }
 
     // 5
-
     public async Task DeleteAsync(Guid id)
     {
         var task = await this.context.Tasks.FindAsync(id);
@@ -62,4 +58,12 @@ public class TaskRepository : ITaskRepository
         }
     }
 
+    // Новий метод для фільтрації завдань за проєктом
+    public async Task<IEnumerable<TaskItem>> GetTasksByProjectIdAsync(Guid projectId)
+    {
+        return await this.context.Tasks
+            .AsNoTracking()
+            .Where(t => t.ProjectId == projectId)
+            .ToListAsync();
+    }
 }
