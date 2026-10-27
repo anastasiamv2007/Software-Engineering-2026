@@ -116,7 +116,26 @@
 
                 <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom" Margin="0,0,0,16">
                     <RadioButton Style="{StaticResource NavButton}" GroupName="Nav" Tag="Settings" Content="⚙  Налаштування" Click="Nav_Click"/>
-                    <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" Margin="26,14,12,0"/>
+
+                    <!-- Панель керування акаунтом -->
+                    <Border Margin="16,12,16,0" Padding="10" Background="#1E293B" CornerRadius="8">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Border CornerRadius="20" Width="32" Height="32" Background="#3B82F6" Margin="0,0,10,0">
+                                    <TextBlock Text="ЯК" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" FontSize="12"/>
+                                    <TextBlock Text="Активна сесія" Foreground="#64748B" FontSize="10"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Кнопки: Вихід та Реєстрація нового аккаунта -->
+                            <UniformGrid Rows="1" Margin="0,4,0,0">
+                                <Button Content="Вийти" Style="{StaticResource SecondaryButton}" FontSize="11" Padding="4,6" Margin="0,0,4,0" Click="LogoutButton_Click" ToolTip="Вийти з поточного облікового запису"/>
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -192,7 +211,7 @@
 
             <!-- ПУЛ ПРОЄКТІВ -->
             <Grid x:Name="Page_Projects" Visibility="Collapsed">
-                <local:ProjectsView />
+                <TextBlock Text="Проєкти: у розробці" Style="{StaticResource PageTitle}"/>
             </Grid>
 
             <!-- 2. СПИСОК ЗАВДАНЬ -->
