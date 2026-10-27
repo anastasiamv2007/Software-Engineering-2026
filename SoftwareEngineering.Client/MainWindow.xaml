@@ -130,15 +130,17 @@
                                 </StackPanel>
                             </StackPanel>
 
-                            <!-- Кнопки: Вихід та Реєстрація нового аккаунта -->
-                            <UniformGrid Rows="1" Margin="0,4,0,0">
-                                <Button Content="Вийти" Style="{StaticResource SecondaryButton}" FontSize="11" Padding="4,6" Margin="0,0,4,0" Click="LogoutButton_Click" ToolTip="Вийти з поточного облікового запису"/>
-                            </UniformGrid>
+                            <!-- Кнопки керування акаунтом -->
+                            <StackPanel>
+                                <Button Content="Вийти" Style="{StaticResource DangerButton}" FontSize="11" Padding="4,6" Margin="0,0,0,4" Click="LogoutButton_Click" ToolTip="Вийти з поточного облікового запису"/>
+                                <Button Content="Змінити базу" Style="{StaticResource SecondaryButton}" FontSize="11" Padding="4,6" Click="DisconnectButton_Click" ToolTip="Вийти та змінити підключення до бази даних"/>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
             </DockPanel>
         </Border>
+
 
         <!-- РОБОЧА ОБЛАСТЬ СТОРІНОК (PagesHost) -->
         <Grid Grid.Column="1" x:Name="PagesHost" Margin="28,24">

@@ -388,6 +388,16 @@ namespace SoftwareEngineering.Client
             }
         }
 
+        private void DisconnectButton_Click(object sender, RoutedEventArgs e)
+        {
+            var result = MessageBox.Show("Ви дійсно хочете розірвати підключення до бази даних?", "Змінити базу", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                Log.Information("Користувач розірвав з'єднання з базою даних о {Time}", DateTime.UtcNow);
+                ((App)Application.Current).SignOutAndDisconnect();
+            }
+        }
+
         private void RegisterNewAccountButton_Click(object sender, RoutedEventArgs e)
         {
             // Логування переходу до реєстрації в Seq

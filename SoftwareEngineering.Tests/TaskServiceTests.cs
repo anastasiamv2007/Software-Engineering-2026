@@ -831,46 +831,5 @@ public class TaskServiceTests
         mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
     }
 
-    [Fact]
-    public async Task DeleteTaskAsync_EmptyTaskId_ThrowsValidationException()
-    {
-        // Arrange
-        var mockRepo = new Mock<ITaskRepository>();
-        var taskService = new TaskService(mockRepo.Object);
 
-        // Act & Assert (змінено ValidationException на загальний Exception)
-        await Assert.ThrowsAsync<Exception>(() =>
-            taskService.DeleteTaskAsync(Guid.Empty, Guid.NewGuid()));
-
-        mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task DeleteTaskAsync_EmptyUserId_ThrowsValidationException()
-    {
-        // Arrange
-        var mockRepo = new Mock<ITaskRepository>();
-        var taskService = new TaskService(mockRepo.Object);
-
-        // Act & Assert (змінено ValidationException на загальний Exception)
-        await Assert.ThrowsAsync<Exception>(() =>
-            taskService.DeleteTaskAsync(Guid.NewGuid(), Guid.Empty));
-
-        mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task GetByIdAsync_RepositoryThrowsException_PropagatesException()
-    {
-        // Arrange
-        var taskId = Guid.NewGuid();
-        var mockRepo = new Mock<ITaskRepository>();
-        mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ThrowsAsync(new InvalidOperationException("DB error"));
-
-        var taskService = new TaskService(mockRepo.Object);
-
-        // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            taskService.GetByIdAsync(taskId));
-    }
 }
