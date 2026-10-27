@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using Serilog;
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
@@ -63,6 +64,7 @@ public partial class LoginWindow : Window {
             MessageBox.Show(ex.Message, "Помилка валідації", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch (Exception ex) {
+            Log.Error(ex, "Неочікувана помилка у вікні входу (режим: {Mode})", _isRegisterMode ? "реєстрація" : "вхід");
             MessageBox.Show($"Виникла неочікувана помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

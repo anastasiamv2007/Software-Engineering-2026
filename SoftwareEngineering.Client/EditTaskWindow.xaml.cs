@@ -13,12 +13,14 @@ namespace SoftwareEngineering.Client
     {
         private readonly ITaskService taskService;
         private readonly TaskModel currentTask;
+        private readonly Guid currentUserId;
 
         public EditTaskWindow(ITaskService taskService, TaskModel taskToEdit, Guid currentUserId)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.currentTask = taskToEdit ?? throw new ArgumentNullException(nameof(taskToEdit));
+            this.currentUserId = currentUserId;
 
             TitleTextBox.Text = currentTask.Title;
             DescriptionTextBox.Text = currentTask.Description;
@@ -53,10 +55,14 @@ namespace SoftwareEngineering.Client
 
                 currentTask.Title = TitleTextBox.Text?.Trim() ?? string.Empty;
                 currentTask.Description = DescriptionTextBox.Text?.Trim() ?? string.Empty;
-                currentTask.Deadline = DeadlineDatePicker.SelectedDate;
+                var picked = DeadlineDatePicker.SelectedDate;
+                if (!(currentTask.Deadline.HasValue && picked.HasValue && currentTask.Deadline.Value.ToLocalTime().Date == picked.Value.Date))
+                {
+                    currentTask.Deadline = picked;
+                }
                 currentTask.Priority = priority;
 
-                await taskService.UpdateAsync(currentTask);
+                await taskService.UpdateAsync(currentTask, currentUserId);
 
                 //3
                 Log.Information("Користувач успішно оновив завдання. ID: {TaskId}, Назва: {TaskTitle}", currentTask.Id, currentTask.Title);

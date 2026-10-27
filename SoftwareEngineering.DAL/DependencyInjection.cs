@@ -8,7 +8,9 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddDataAccess(this IServiceCollection services, string connectionString)
     {
-        services.AddDbContext<AppDbContext>(options => options
+        // DbContext не потокобезпечний: у WPF кілька вікон/вкладок вантажать дані одночасно,
+        // тому кожна операція репозиторію створює власний короткоживучий контекст через фабрику
+        services.AddDbContextFactory<AppDbContext>(options => options
             .UseNpgsql(connectionString)
             .UseSnakeCaseNamingConvention());
 

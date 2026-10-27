@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+using Serilog;
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
@@ -10,24 +11,28 @@ namespace SoftwareEngineering.BLL.Services;
 public class AuthService : IAuthService {
     private readonly IUserRepository _userRepository;
 
+    private static ILogger Logger => Log.ForContext<AuthService>();
+
     public AuthService(IUserRepository userRepository) {
         _userRepository = userRepository;
     }
 
     public async Task<UserModel> RegisterAsync(RegisterUserModel model, CancellationToken cancellationToken = default) {
+        string? email = model.Email?.Trim().ToLowerInvariant();
+
         if (string.IsNullOrWhiteSpace(model.FullName))
-            throw new ValidationException("Ім'я користувача не може бути порожнім.");
+            throw RegistrationFailed(email, "Ім'я користувача не може бути порожнім.");
 
         if (string.IsNullOrWhiteSpace(model.Email) || !Regex.IsMatch(model.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
-            throw new ValidationException("Введено некоректний формат електронної пошти.");
+            throw RegistrationFailed(email, "Введено некоректний формат електронної пошти.");
 
         if (string.IsNullOrWhiteSpace(model.Password) || model.Password.Length < 6)
-            throw new ValidationException("Пароль повинен містити щонайменше 6 символів.");
+            throw RegistrationFailed(email, "Пароль повинен містити щонайменше 6 символів.");
 
         string normalizedEmail = model.Email.Trim().ToLowerInvariant();
 
         if (await _userRepository.ExistsByEmailAsync(normalizedEmail, cancellationToken))
-            throw new ValidationException("Користувач із такою електронною поштою вже зареєстрований.");
+            throw RegistrationFailed(normalizedEmail, "Користувач із такою електронною поштою вже зареєстрований.");
 
         var user = new User {
             Id = Guid.NewGuid(),
@@ -37,8 +42,15 @@ public class AuthService : IAuthService {
             CreatedAt = DateTime.UtcNow
         };
 
-        await _userRepository.AddAsync(user, cancellationToken);
-        await _userRepository.SaveChangesAsync(cancellationToken);
+        try {
+            await _userRepository.AddAsync(user, cancellationToken);
+        }
+        catch (Exception ex) {
+            Logger.Error(ex, "Помилка БД під час реєстрації користувача {Email}", normalizedEmail);
+            throw;
+        }
+
+        Logger.Information("Зареєстровано нового користувача {UserId} ({Email})", user.Id, user.Email);
 
         return new UserModel {
             Id = user.Id,
@@ -49,12 +61,34 @@ public class AuthService : IAuthService {
     }
 
     public async Task<UserModel> LoginAsync(LoginUserModel model, CancellationToken cancellationToken = default) {
-        if (string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.Password))
+        if (string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.Password)) {
+            Logger.Warning("Невдала спроба входу: не вказано email або пароль");
             throw new ValidationException("Вкажіть email та пароль.");
+        }
 
-        var user = await _userRepository.GetByEmailAsync(model.Email, cancellationToken);
-        if (user == null || !PasswordHasher.Verify(model.Password, user.PasswordHash))
+        string email = model.Email.Trim().ToLowerInvariant();
+
+        User? user;
+        try {
+            user = await _userRepository.GetByEmailAsync(email, cancellationToken);
+        }
+        catch (Exception ex) {
+            Logger.Error(ex, "Помилка БД під час входу користувача {Email}", email);
+            throw;
+        }
+
+        // Користувачу показуємо одне загальне повідомлення, а в лог пишемо справжню причину
+        if (user == null) {
+            Logger.Warning("Невдала спроба входу {Email}: користувача не знайдено", email);
             throw new ValidationException("Невірний email або пароль.");
+        }
+
+        if (!PasswordHasher.Verify(model.Password, user.PasswordHash)) {
+            Logger.Warning("Невдала спроба входу {Email} (користувач {UserId}): невірний пароль", email, user.Id);
+            throw new ValidationException("Невірний email або пароль.");
+        }
+
+        Logger.Information("Успішний вхід користувача {UserId} ({Email})", user.Id, email);
 
         return new UserModel {
             Id = user.Id,
@@ -62,6 +96,11 @@ public class AuthService : IAuthService {
             FullName = user.FullName,
             CreatedAt = user.CreatedAt
         };
+    }
+
+    private static ValidationException RegistrationFailed(string? email, string reason) {
+        Logger.Warning("Невдала реєстрація {Email}: {Reason}", email, reason);
+        return new ValidationException(reason);
     }
 
     public async Task<UserModel?> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken = default) {

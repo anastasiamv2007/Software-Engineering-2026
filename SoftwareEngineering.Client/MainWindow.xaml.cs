@@ -1,4 +1,4 @@
-using Serilog;
+﻿using Serilog;
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
@@ -12,17 +12,47 @@ namespace SoftwareEngineering.Client
     {
         private readonly ITaskService taskService;
         private readonly IProjectService projectService;
+        private readonly IUserSession userSession;
         private IReadOnlyList<TaskModel> allTasks = new List<TaskModel>();
         private TaskModel? currentSelectedTask;
 
-        public MainWindow(ITaskService taskService, IProjectService projectService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
+            this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
+
+            // Поточний користувач береться із сесії, а не вводиться вручну
+            UserNameText.Text = userSession.CurrentUser?.FullName ?? "Користувач";
+            ProgUserIdTextBox.Text = CurrentUserId.ToString();
+            ProgUserIdTextBox.IsReadOnly = true;
+            DelUserIdTextBox.Text = CurrentUserId.ToString();
+            DelUserIdTextBox.IsReadOnly = true;
 
             DeadlineDatePicker.SelectedDate = DateTime.Now.AddDays(1);
             Loaded += async (_, _) => await LoadTasksAsync();
+        }
+
+        private Guid CurrentUserId => userSession.CurrentUserId ?? Guid.Empty;
+
+        // Готові обробники для кнопок виходу — прив'яжіть у XAML через Click="SignOut_Click" / Click="SignOutAndDisconnect_Click"
+        private void SignOut_Click(object sender, RoutedEventArgs e)
+        {
+            ((App)Application.Current).SignOut();
+        }
+
+        private void SignOutAndDisconnect_Click(object sender, RoutedEventArgs e)
+        {
+            ((App)Application.Current).SignOutAndDisconnect();
+        }
+
+        // DatePicker повертає лише дату — якщо день не змінився, лишаємо початковий дедлайн разом із часом
+        private static DateTime? KeepTimeIfSameDay(DateTime? original, DateTime? picked)
+        {
+            return original.HasValue && picked.HasValue && original.Value.ToLocalTime().Date == picked.Value.Date
+                ? original
+                : picked;
         }
 
         private void Nav_Click(object sender, RoutedEventArgs e)
@@ -122,11 +152,12 @@ namespace SoftwareEngineering.Client
                     priority = parsed;
                 }
 
-                var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty);
+                var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty, CurrentUserId);
 
                 await taskService.CreateAsync(new TaskModel
                 {
                     ProjectId = project.Id,
+                    OwnerId = CurrentUserId,
                     Title = TitleTextBox.Text?.Trim() ?? string.Empty,
                     Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
                     Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
@@ -182,9 +213,7 @@ namespace SoftwareEngineering.Client
         {
             if (TasksDataGrid.SelectedItem is TaskModel selectedTask)
             {
-                var currentUserId = Guid.Empty;
-
-                var editWindow = new EditTaskWindow(taskService, selectedTask, currentUserId)
+                var editWindow = new EditTaskWindow(taskService, selectedTask, CurrentUserId)
                 {
                     Owner = this
                 };
@@ -242,10 +271,10 @@ namespace SoftwareEngineering.Client
 
                 currentSelectedTask.Title = EditTitleTextBox.Text?.Trim() ?? string.Empty;
                 currentSelectedTask.Description = EditDescriptionTextBox.Text?.Trim() ?? string.Empty;
-                currentSelectedTask.Deadline = EditDeadlineDatePicker.SelectedDate;
+                currentSelectedTask.Deadline = KeepTimeIfSameDay(currentSelectedTask.Deadline, EditDeadlineDatePicker.SelectedDate);
                 currentSelectedTask.Priority = priority;
 
-                await taskService.UpdateAsync(currentSelectedTask);
+                await taskService.UpdateAsync(currentSelectedTask, CurrentUserId);
 
                 Log.Information("Оновлено завдання ID: {TaskId}", currentSelectedTask.Id);
                 MessageBox.Show("Завдання успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -274,7 +303,7 @@ namespace SoftwareEngineering.Client
             try
             {
                 _ = Guid.TryParse(ProgTaskIdTextBox.Text?.Trim(), out var taskId);
-                _ = Guid.TryParse(ProgUserIdTextBox.Text?.Trim(), out var userId);
+                var userId = CurrentUserId;
 
                 var status = TaskItemStatus.InProgress;
                 if (ProgStatusComboBox.SelectedItem is ComboBoxItem selectedItem &&
@@ -321,11 +350,7 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            if (!Guid.TryParse(DelUserIdTextBox.Text.Trim(), out Guid userId))
-            {
-                DelStatusText.Text = "Помилка: Невалідний User ID.";
-                return;
-            }
+            var userId = CurrentUserId;
 
             try
             {

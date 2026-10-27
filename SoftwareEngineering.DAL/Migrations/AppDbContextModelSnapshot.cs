@@ -253,6 +253,10 @@ namespace SoftwareEngineering.DAL.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -289,6 +293,9 @@ namespace SoftwareEngineering.DAL.Migrations
 
                     b.HasIndex("CategoryId")
                         .HasDatabaseName("ix_tasks_category_id");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_tasks_owner_id");
 
                     b.HasIndex("ProjectId", "TaskCode")
                         .IsUnique()
@@ -429,6 +436,13 @@ namespace SoftwareEngineering.DAL.Migrations
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_tasks_categories_category_id");
+
+                    b.HasOne("SoftwareEngineering.DAL.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_tasks_users_owner_id");
 
                     b.HasOne("SoftwareEngineering.DAL.Entities.Project", "Project")
                         .WithMany("Tasks")

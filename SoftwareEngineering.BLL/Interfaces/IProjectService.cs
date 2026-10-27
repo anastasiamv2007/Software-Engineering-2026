@@ -14,5 +14,6 @@ public interface IProjectService : IService
     Task UpdateProjectAsync(UpdateProjectModel model);
 
     Task DeleteProjectAsync(Guid id);
-    Task<ProjectModel> GetOrCreateByNameAsync(string name);
+
+    Task<ProjectModel> GetOrCreateByNameAsync(string name, Guid ownerId);
 }

@@ -14,6 +14,14 @@ public class TaskServiceTests
 
     private readonly Mock<ITaskRepository> repositoryMock = new(); private TaskItem? savedTask;
 
+    private readonly Mock<IProjectRepository> projectRepositoryMock = new();
+
+    public TaskServiceTests()
+    {
+        // За замовчуванням користувач — співвиконавець проєкту
+        this.SetProjectRole(ProjectRole.CoExecutor);
+    }
+
     [Fact]
     public async Task CreateAsync_ValidModel_ReturnsCodeBasedOnProjectTaskCount()
     {
@@ -237,6 +245,7 @@ public class TaskServiceTests
         return new TaskModel
         {
             ProjectId = Guid.NewGuid(),
+            OwnerId = Guid.NewGuid(),
             Title = "Описати вимоги",
             Deadline = DateTime.UtcNow.AddDays(2),
         };
@@ -244,7 +253,14 @@ public class TaskServiceTests
 
     private TaskService CreateService()
     {
-        return new TaskService(this.repositoryMock.Object);
+        return new TaskService(this.repositoryMock.Object, this.projectRepositoryMock.Object);
+    }
+
+    private void SetProjectRole(ProjectRole? role)
+    {
+        this.projectRepositoryMock
+            .Setup(repository => repository.GetMemberRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .ReturnsAsync(role);
     }
 
     private void CaptureSavedTask()
@@ -261,7 +277,7 @@ public class TaskServiceTests
     public async Task GetByIdAsync_EmptyId_ThrowsValidationException()
     {
         var mockRepo = new Mock<ITaskRepository>();
-        var service = new TaskService(mockRepo.Object);
+        var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
         var emptyId = Guid.Empty;
 
         var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(emptyId));
@@ -275,7 +291,7 @@ public class TaskServiceTests
         var fakeId = Guid.NewGuid();
 
         mockRepo.Setup(repo => repo.GetByIdAsync(fakeId)).ReturnsAsync((TaskItem?)null);
-        var service = new TaskService(mockRepo.Object);
+        var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
 
         var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(fakeId));
         Assert.Contains("не знайдено", exception.Message);
@@ -296,7 +312,7 @@ public class TaskServiceTests
         };
 
         mockRepo.Setup(repo => repo.GetByIdAsync(validId)).ReturnsAsync(fakeEntity);
-        var service = new TaskService(mockRepo.Object);
+        var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
 
         var result = await service.GetByIdAsync(validId);
 
@@ -322,10 +338,12 @@ public class TaskServiceTests
         };
 
 
+        var userId = Guid.NewGuid();
         var existingEntity = new TaskItem
         {
             Id = validModel.Id,
             ProjectId = Guid.NewGuid(),
+            OwnerId = userId,
             Title = "Стара назва"
         };
 
@@ -336,7 +354,7 @@ public class TaskServiceTests
         var service = this.CreateService();
 
 
-        await service.UpdateAsync(validModel);
+        await service.UpdateAsync(validModel, userId);
 
 
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.Is<TaskItem>(
@@ -357,14 +375,14 @@ public class TaskServiceTests
         };
         var service = this.CreateService();
 
-        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(invalidModel));
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(invalidModel, Guid.NewGuid()));
 
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
     }
 
     // 6
     [Fact]
-    public async Task UpdateDeadlineAsync_UserIsNotAssignee_UpdatesDeadlineAndCallsRepository()
+    public async Task UpdateDeadlineAsync_UserIsOwner_UpdatesDeadlineAndCallsRepository()
     {
         // Arrange
         var taskId = Guid.NewGuid();
@@ -376,6 +394,7 @@ public class TaskServiceTests
             Id = taskId,
             ProjectId = Guid.NewGuid(),
             Title = "Спільне завдання",
+            OwnerId = ownerId,
             AssigneeId = Guid.NewGuid(),
             Deadline = DateTime.UtcNow.AddDays(1)
         };
@@ -396,7 +415,7 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task UpdateDeadlineAsync_UserIsAssignee_ThrowsValidationException()
+    public async Task UpdateDeadlineAsync_UserIsAssigneeNotOwner_ThrowsValidationException()
     {
         // Arrange
         var taskId = Guid.NewGuid();
@@ -408,6 +427,7 @@ public class TaskServiceTests
             Id = taskId,
             ProjectId = Guid.NewGuid(),
             Title = "Спільне завдання",
+            OwnerId = Guid.NewGuid(),
             AssigneeId = assigneeId,
             Deadline = DateTime.UtcNow.AddDays(1)
         };
@@ -422,7 +442,7 @@ public class TaskServiceTests
         var exception = await Assert.ThrowsAsync<ValidationException>(() =>
             service.UpdateDeadlineAsync(taskId, newDeadline, assigneeId));
 
-        Assert.Contains("лише власник завдання має право", exception.Message);
+        Assert.Contains("лише власник завдання або проєкту", exception.Message);
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
     }
 
@@ -606,6 +626,145 @@ public class TaskServiceTests
             () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, userId));
     }
 
+    // Матриця прав: власник проєкту / співвиконавець
+
+    [Fact]
+    public async Task CreateAsync_UserIsNotProjectMember_ThrowsValidationException()
+    {
+        // Arrange
+        this.SetProjectRole(null);
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(CreateValidModel()));
+        this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteTaskAsync_ProjectOwnerDeletesCoExecutorTask_Deletes()
+    {
+        // Arrange
+        this.SetProjectRole(ProjectRole.Owner);
+        var task = new TaskItem { Id = Guid.NewGuid(), OwnerId = Guid.NewGuid() };
+        this.repositoryMock.Setup(repository => repository.GetByIdAsync(task.Id)).ReturnsAsync(task);
+        var service = this.CreateService();
+
+        // Act
+        await service.DeleteTaskAsync(task.Id, Guid.NewGuid());
+
+        // Assert
+        this.repositoryMock.Verify(repository => repository.DeleteAsync(task.Id), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateDeadlineAsync_ProjectOwnerOnCoExecutorTask_UpdatesDeadline()
+    {
+        // Arrange
+        this.SetProjectRole(ProjectRole.Owner);
+        var task = new TaskItem { Id = Guid.NewGuid(), OwnerId = Guid.NewGuid(), Title = "Завдання", TaskCode = "PL-1" };
+        this.repositoryMock.Setup(repository => repository.GetByIdAsync(task.Id)).ReturnsAsync(task);
+        var service = this.CreateService();
+
+        // Act
+        await service.UpdateDeadlineAsync(task.Id, DateTime.UtcNow.AddDays(3), Guid.NewGuid());
+
+        // Assert
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(task), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_CoExecutorChangesDeadlineOfOthersTask_ThrowsValidationException()
+    {
+        // Arrange
+        var task = new TaskItem { Id = Guid.NewGuid(), OwnerId = Guid.NewGuid(), Title = "Завдання", Deadline = DateTime.UtcNow.AddDays(1) };
+        this.repositoryMock.Setup(repository => repository.GetByIdAsync(task.Id)).ReturnsAsync(task);
+        var model = new TaskModel { Id = task.Id, Title = "Завдання", Deadline = DateTime.UtcNow.AddDays(5) };
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(model, Guid.NewGuid()));
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_CoExecutorEditsTitleOfOthersTask_Updates()
+    {
+        // Arrange
+        var deadline = DateTime.UtcNow.AddDays(1);
+        var task = new TaskItem { Id = Guid.NewGuid(), OwnerId = Guid.NewGuid(), Title = "Стара назва", Deadline = deadline };
+        this.repositoryMock.Setup(repository => repository.GetByIdAsync(task.Id)).ReturnsAsync(task);
+        var model = new TaskModel { Id = task.Id, Title = "Нова назва", Deadline = deadline };
+        var service = this.CreateService();
+
+        // Act
+        await service.UpdateAsync(model, Guid.NewGuid());
+
+        // Assert
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(It.Is<TaskItem>(t => t.Title == "Нова назва")), Times.Once);
+    }
+
+    // 4
+
+    [Fact]
+    public async Task DeleteTaskByOwnerAsync_UserIsOwner_DeletesTaskById()
+    {
+        // Arrange
+        var ownerId = Guid.NewGuid();
+        var task = new TaskItem { Id = Guid.NewGuid(), OwnerId = ownerId, Title = "Завдання", TaskCode = "PL-1" };
+        this.repositoryMock.Setup(repository => repository.GetByIdAsync(task.Id)).ReturnsAsync(task);
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.DeleteTaskByOwnerAsync(new TaskModel { Id = task.Id }, ownerId);
+
+        // Assert
+        Assert.Equal(task.Id, result.Id);
+        this.repositoryMock.Verify(repository => repository.DeleteAsync(task), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteTaskByOwnerAsync_UserIsNotOwner_ThrowsValidationException()
+    {
+        // Arrange
+        var task = new TaskItem { Id = Guid.NewGuid(), OwnerId = Guid.NewGuid() };
+        this.repositoryMock.Setup(repository => repository.GetByIdAsync(task.Id)).ReturnsAsync(task);
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.DeleteTaskByOwnerAsync(new TaskModel { Id = task.Id }, Guid.NewGuid()));
+        this.repositoryMock.Verify(repository => repository.DeleteAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ValidModel_SavesOwnerAndCreator()
+    {
+        // Arrange
+        this.CaptureSavedTask();
+        var model = CreateValidModel();
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.CreateAsync(model);
+
+        // Assert
+        Assert.Equal(model.OwnerId, this.savedTask!.OwnerId);
+        Assert.Equal(model.OwnerId, this.savedTask.CreatorId);
+        Assert.Equal(model.OwnerId, result.OwnerId);
+    }
+
+    [Fact]
+    public async Task CreateAsync_EmptyOwnerId_ThrowsValidationException()
+    {
+        // Arrange
+        var model = CreateValidModel();
+        model.OwnerId = Guid.Empty;
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+    }
+
     // 5
 
     [Fact]
@@ -614,12 +773,12 @@ public class TaskServiceTests
         // Arrange
         var taskId = Guid.NewGuid();
         var ownerId = Guid.NewGuid();
-        var task = new TaskItem { Id = taskId, CreatorId = ownerId };
+        var task = new TaskItem { Id = taskId, OwnerId = ownerId };
 
         var mockRepo = new Mock<ITaskRepository>();
         mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ReturnsAsync(task);
 
-        var taskService = new TaskService(mockRepo.Object);
+        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
 
         // Act
         await taskService.DeleteTaskAsync(taskId, ownerId);
@@ -636,15 +795,15 @@ public class TaskServiceTests
         var taskId = Guid.NewGuid();
         var ownerId = Guid.NewGuid();
         var strangerId = Guid.NewGuid(); // Інший користувач
-        var task = new TaskItem { Id = taskId, CreatorId = ownerId };
+        var task = new TaskItem { Id = taskId, OwnerId = ownerId };
 
         var mockRepo = new Mock<ITaskRepository>();
         mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ReturnsAsync(task);
 
-        var taskService = new TaskService(mockRepo.Object);
+        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
 
         // Act & Assert
-        await Assert.ThrowsAsync<Exception>(() =>
+        await Assert.ThrowsAsync<ValidationException>(() =>
             taskService.DeleteTaskAsync(taskId, strangerId));
 
         mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
@@ -663,10 +822,10 @@ public class TaskServiceTests
         // Виправлено: додано знак питання (TaskItem?) для Nullable типів
         mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ReturnsAsync((TaskItem?)null);
 
-        var taskService = new TaskService(mockRepo.Object);
+        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
 
         // Act & Assert
-        await Assert.ThrowsAsync<Exception>(() =>
+        await Assert.ThrowsAsync<ValidationException>(() =>
             taskService.DeleteTaskAsync(taskId, userId));
 
         mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);

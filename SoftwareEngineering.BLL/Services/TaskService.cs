@@ -6,17 +6,21 @@ using SoftwareEngineering.DAL.Repositories;
 
 namespace SoftwareEngineering.BLL.Services;
 
+/// <summary>
+/// Права в проєкті: Owner може все; співвиконавець створює задачі, а видаляє та змінює дедлайн лише у своїх.
+/// </summary>
 public class TaskService : BaseService, ITaskService
 {
     private const int MaxTitleLength = 200;
     private const string TaskCodePrefix = "PL-";
 
     private readonly ITaskRepository taskRepository;
-    
+    private readonly IProjectRepository projectRepository;
 
-    public TaskService(ITaskRepository taskRepository)
+    public TaskService(ITaskRepository taskRepository, IProjectRepository projectRepository)
     {
         this.taskRepository = taskRepository;
+        this.projectRepository = projectRepository;
     }
 
     public async Task<IReadOnlyList<TaskModel>> GetAllAsync()
@@ -34,6 +38,11 @@ public class TaskService : BaseService, ITaskService
 
         return await this.ExecuteWithLoggingAsync("Створення завдання", async () =>
         {
+            var role = await this.projectRepository.GetMemberRoleAsync(model.ProjectId, model.OwnerId);
+            this.ValidateCondition(
+                role is ProjectRole.Owner or ProjectRole.CoExecutor,
+                "Створювати завдання можуть лише власник проєкту та співвиконавці.");
+
             var entity = await this.BuildEntityAsync(model);
             await this.taskRepository.AddAsync(entity);
 
@@ -57,18 +66,32 @@ public class TaskService : BaseService, ITaskService
     }
 
     // 3
-    public async Task<TaskModel> UpdateAsync(TaskModel model)
+    public async Task<TaskModel> UpdateAsync(TaskModel model, Guid currentUserId)
     {
         return await this.ExecuteWithLoggingAsync("Редагування завдання", async () =>
         {
             this.ValidateUpdateTask(model);
+            this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор користувача не вказано.");
 
             var entity = await this.taskRepository.GetByIdAsync(model.Id);
             this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
 
-            entity!.Title = model.Title.Trim();
+            var role = await this.projectRepository.GetMemberRoleAsync(entity!.ProjectId, currentUserId);
+            this.ValidateCondition(
+                entity.OwnerId == currentUserId || role is ProjectRole.Owner or ProjectRole.CoExecutor,
+                "Редагувати завдання можуть лише власник проєкту та співвиконавці.");
+
+            var newDeadline = model.Deadline?.ToUniversalTime();
+            if (newDeadline != entity.Deadline)
+            {
+                this.ValidateCondition(
+                    CanManage(entity, currentUserId, role),
+                    "Змінювати дедлайн чужого завдання може лише власник проєкту.");
+            }
+
+            entity.Title = model.Title.Trim();
             entity.Description = model.Description;
-            entity.Deadline = model.Deadline?.ToUniversalTime();
+            entity.Deadline = newDeadline;
             entity.Priority = model.Priority;
             entity.CategoryId = model.CategoryId;
 
@@ -78,41 +101,44 @@ public class TaskService : BaseService, ITaskService
         });
     }
 
+    // 4
     public async Task<TaskModel> DeleteTaskByOwnerAsync(TaskModel model, Guid currentUserId)
     {
-        await this.ExecuteWithLoggingAsync("Видалення завдання", async () =>
+        return await this.ExecuteWithLoggingAsync("Видалення завдання", async () =>
         {
-            this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор завдання не вказано.");
+            this.ValidateCondition(model != null, "Дані завдання не передано.");
+            this.ValidateCondition(model!.Id != Guid.Empty, "Ідентифікатор завдання не вказано.");
+            this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор користувача не вказано.");
 
-            var entity = await this.taskRepository.GetByIdAsync(currentUserId);
+            var entity = await this.taskRepository.GetByIdAsync(model.Id);
             this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
-
-            // Місце під Activity Log / перевірку прав
-            // ...
+            this.ValidateCondition(
+                await this.CanManageAsync(entity!, currentUserId),
+                "Видаляти можна лише власні завдання (власник проєкту може видаляти будь-які).");
 
             await this.taskRepository.DeleteAsync(entity!);
-            return true;
+
+            return ToModel(entity!);
         });
-        return model;
     }
 
     // 5
     public async Task DeleteTaskAsync(Guid taskId, Guid currentUserId)
     {
-        
-        var task = await this.taskRepository.GetByIdAsync(taskId);
-
-        if (task == null)
+        await this.ExecuteWithLoggingAsync("Видалення спільного завдання", async () =>
         {
-            throw new Exception("Завдання не знайдено або вже було видалено.");
-        }
+            this.ValidateCondition(taskId != Guid.Empty, "Ідентифікатор завдання не вказано.");
+            this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор користувача не вказано.");
 
-        if (task.CreatorId != currentUserId)
-        {
-            throw new Exception("У вас немає прав на видалення. Лише власник завдання може його повністю вилучити.");
-        }
+            var task = await this.taskRepository.GetByIdAsync(taskId);
+            this.ValidateCondition(task != null, "Завдання не знайдено або вже було видалено.");
+            this.ValidateCondition(
+                await this.CanManageAsync(task!, currentUserId),
+                "У вас немає прав на видалення. Співвиконавець може вилучати лише власні завдання.");
 
-        await this.taskRepository.DeleteAsync(taskId);
+            await this.taskRepository.DeleteAsync(taskId);
+            return true;
+        });
     }
 
     // 6
@@ -128,12 +154,12 @@ public class TaskService : BaseService, ITaskService
             var entity = await this.taskRepository.GetByIdAsync(taskId);
             this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
 
-            // Обмежена дія: лише власник має право змінювати дедлайн спільної задачі
+            // Обмежена дія: дедлайн змінює автор завдання або власник проєкту
             this.ValidateCondition(
-                entity!.AssigneeId != currentUserId,
-                "Обмежена дія: лише власник завдання має право змінювати дедлайн спільної задачі.");
+                await this.CanManageAsync(entity!, currentUserId),
+                "Обмежена дія: лише власник завдання або проєкту має право змінювати дедлайн.");
 
-            var oldDeadline = entity.Deadline;
+            var oldDeadline = entity!.Deadline;
             entity.Deadline = newDeadline.Value.ToUniversalTime();
 
             await this.taskRepository.UpdateAsync(entity);
@@ -181,6 +207,25 @@ public class TaskService : BaseService, ITaskService
         });
     }
 
+    private static bool CanManage(TaskItem task, Guid userId, ProjectRole? role)
+    {
+        return task.OwnerId == userId || role == ProjectRole.Owner;
+    }
+
+    /// <summary>
+    /// Видаляти завдання та змінювати дедлайн може його власник або власник проєкту.
+    /// </summary>
+    private async Task<bool> CanManageAsync(TaskItem task, Guid userId)
+    {
+        if (task.OwnerId == userId)
+        {
+            return true;
+        }
+
+        var role = await this.projectRepository.GetMemberRoleAsync(task.ProjectId, userId);
+        return CanManage(task, userId, role);
+    }
+
     private static TaskModel ToModel(TaskItem entity)
     {
         return new TaskModel
@@ -194,6 +239,7 @@ public class TaskService : BaseService, ITaskService
             Priority = entity.Priority,
             CategoryId = entity.CategoryId,
             Status = entity.Status,
+            OwnerId = entity.OwnerId,
         };
     }
 
@@ -203,6 +249,7 @@ public class TaskService : BaseService, ITaskService
         this.ValidateNotEmpty(model!.Title, "Назва");
         this.ValidateCondition(model.Title.Trim().Length <= MaxTitleLength, "Назва занадто довга.");
         this.ValidateCondition(model.ProjectId != Guid.Empty, "Не вказано проєкт.");
+        this.ValidateCondition(model.OwnerId != Guid.Empty, "Не вказано власника завдання.");
         this.ValidateCondition(model.Deadline.HasValue, "Дедлайн не вказано.");
         this.ValidateCondition(model.Deadline!.Value.ToUniversalTime() > DateTime.UtcNow, "Дедлайн не може бути в минулому.");
     }
@@ -228,6 +275,8 @@ public class TaskService : BaseService, ITaskService
         {
             Id = Guid.NewGuid(),
             ProjectId = model.ProjectId,
+            OwnerId = model.OwnerId,
+            CreatorId = model.OwnerId,
             TaskCode = $"{TaskCodePrefix}{tasksInProject + 1}",
             Title = model.Title.Trim(),
             Description = model.Description,
