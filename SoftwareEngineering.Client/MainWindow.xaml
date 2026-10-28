@@ -116,10 +116,31 @@
 
                 <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom" Margin="0,0,0,16">
                     <RadioButton Style="{StaticResource NavButton}" GroupName="Nav" Tag="Settings" Content="⚙  Налаштування" Click="Nav_Click"/>
-                    <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" Margin="26,14,12,0"/>
+
+                    <!-- Панель керування акаунтом -->
+                    <Border Margin="16,12,16,0" Padding="10" Background="#1E293B" CornerRadius="8">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Border CornerRadius="20" Width="32" Height="32" Background="#3B82F6" Margin="0,0,10,0">
+                                    <TextBlock Text="ЯК" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" FontSize="12"/>
+                                    <TextBlock Text="Активна сесія" Foreground="#64748B" FontSize="10"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Кнопки керування акаунтом -->
+                            <StackPanel>
+                                <Button Content="Вийти" Style="{StaticResource DangerButton}" FontSize="11" Padding="4,6" Margin="0,0,0,4" Click="LogoutButton_Click" ToolTip="Вийти з поточного облікового запису"/>
+                                <Button Content="Змінити базу" Style="{StaticResource SecondaryButton}" FontSize="11" Padding="4,6" Click="DisconnectButton_Click" ToolTip="Вийти та змінити підключення до бази даних"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </DockPanel>
         </Border>
+
 
         <!-- РОБОЧА ОБЛАСТЬ СТОРІНОК (PagesHost) -->
         <Grid Grid.Column="1" x:Name="PagesHost" Margin="28,24">
@@ -192,7 +213,7 @@
 
             <!-- ПУЛ ПРОЄКТІВ -->
             <Grid x:Name="Page_Projects" Visibility="Collapsed">
-                <local:ProjectsView />
+                <TextBlock Text="Проєкти: у розробці" Style="{StaticResource PageTitle}"/>
             </Grid>
 
             <!-- 2. СПИСОК ЗАВДАНЬ -->

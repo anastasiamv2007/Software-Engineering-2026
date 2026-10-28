@@ -386,8 +386,8 @@ public class TaskServiceTests
     {
         // Arrange
         var taskId = Guid.NewGuid();
-        var ownerId = Guid.NewGuid(); 
-        var newDeadline = DateTime.UtcNow.AddDays(5); 
+        var ownerId = Guid.NewGuid();
+        var newDeadline = DateTime.UtcNow.AddDays(5);
 
         var existingEntity = new TaskItem
         {
@@ -452,7 +452,7 @@ public class TaskServiceTests
         // Arrange
         var taskId = Guid.NewGuid();
         var currentUserId = Guid.NewGuid();
-        var pastDeadline = DateTime.UtcNow.AddDays(-1); 
+        var pastDeadline = DateTime.UtcNow.AddDays(-1);
 
         var service = this.CreateService();
 
@@ -830,4 +830,6 @@ public class TaskServiceTests
 
         mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
     }
+
+
 }
