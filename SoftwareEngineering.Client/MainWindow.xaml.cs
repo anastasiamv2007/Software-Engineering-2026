@@ -2,9 +2,12 @@
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.DAL.Enums;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+
 
 namespace SoftwareEngineering.Client
 {
@@ -15,13 +18,24 @@ namespace SoftwareEngineering.Client
         private readonly IUserSession userSession;
         private IReadOnlyList<TaskModel> allTasks = new List<TaskModel>();
         private TaskModel? currentSelectedTask;
+        private readonly ICategoryService categoryService;
+        private CategoryModel? selectedCategory;
+        private string selectedCategoryColor = CategoryPalette[0];
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession)
+        private static readonly string[] CategoryPalette =
+        {
+            "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
+        };
+
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
             this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
+            this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
+            BuildCategoryPalette();
+            StartCategoryCreateMode();
 
             // Поточний користувач береться із сесії, а не вводиться вручну
             UserNameText.Text = userSession.CurrentUser?.FullName ?? "Користувач";
@@ -407,6 +421,152 @@ namespace SoftwareEngineering.Client
             loginWindow.Show();
             this.Close();
         }
+
+        // ---------- Категорії ----------
+        private static Brush ToBrush(string hex)
+        {
+            return (Brush)new BrushConverter().ConvertFromString(hex)!;
+        }
+
+        private async Task LoadCategoriesAsync()
+        {
+            var result = await categoryService.GetAllAsync();
+            if (result.IsFailure)
+            {
+                ShowCategoryError(result.Error!.Message);
+                return;
+            }
+
+            CatList.ItemsSource = result.Value;
+        }
+
+        private void BuildCategoryPalette()
+        {
+            foreach (var hex in CategoryPalette)
+            {
+                var button = new Button
+                {
+                    Width = 26,
+                    Height = 26,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    Background = ToBrush(hex),
+                    BorderThickness = new Thickness(0),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Tag = hex,
+                };
+                button.Click += (_, _) => SelectCategoryColor(hex);
+                CatPalette.Children.Add(button);
+            }
+        }
+
+        private void SelectCategoryColor(string hex)
+        {
+            selectedCategoryColor = hex;
+            CatPreviewDot.Fill = ToBrush(hex);
+
+            foreach (Button button in CatPalette.Children)
+            {
+                button.BorderThickness = new Thickness((string)button.Tag == hex ? 3 : 0);
+                button.BorderBrush = Brushes.Black;
+            }
+        }
+
+        private void StartCategoryCreateMode()
+        {
+            selectedCategory = null;
+            CatList.SelectedItem = null;
+            CatHeader.Text = "Створити категорію";
+            CatSaveButton.Content = "Додати категорію";
+            CatDeleteButton.Visibility = Visibility.Collapsed;
+            CatName.Text = string.Empty;
+            CatError.Visibility = Visibility.Collapsed;
+            SelectCategoryColor(CategoryPalette[0]);
+        }
+
+        private void ShowCategoryError(string message)
+        {
+            CatError.Text = message;
+            CatError.Visibility = Visibility.Visible;
+        }
+
+        private void CatList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CatList.SelectedItem is not CategoryModel category)
+            {
+                return;
+            }
+
+            selectedCategory = category;
+            CatHeader.Text = "Редагування категорії";
+            CatSaveButton.Content = "Зберегти зміни";
+            CatDeleteButton.Visibility = Visibility.Visible;
+            CatName.Text = category.Name;
+            CatError.Visibility = Visibility.Collapsed;
+            SelectCategoryColor(category.ColorHex);
+        }
+
+        private void CatName_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (CatPreviewText != null)
+            {
+                CatPreviewText.Text = string.IsNullOrWhiteSpace(CatName.Text) ? "Поки що без назви" : CatName.Text.Trim();
+            }
+        }
+
+        private void CatCancel_Click(object sender, RoutedEventArgs e)
+        {
+            StartCategoryCreateMode();
+        }
+
+        private async void CatSave_Click(object sender, RoutedEventArgs e)
+        {
+            CatError.Visibility = Visibility.Collapsed;
+
+            Result result = selectedCategory is null
+                ? await categoryService.CreateAsync(new CreateCategoryModel { Name = CatName.Text, ColorHex = selectedCategoryColor })
+                : await categoryService.UpdateAsync(new UpdateCategoryModel { Id = selectedCategory.Id, Name = CatName.Text, ColorHex = selectedCategoryColor });
+
+            if (result.IsFailure)
+            {
+                ShowCategoryError(result.Error!.Message);
+                return;
+            }
+
+            StartCategoryCreateMode();
+            await LoadCategoriesAsync();
+        }
+
+        private async void CatDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (selectedCategory is null)
+            {
+                return;
+            }
+
+            var answer = MessageBox.Show(
+                $"Видалити категорію \"{selectedCategory.Name}\"? У завданнях категорію буде скинуто.",
+                "Підтвердження",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (answer != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var result = await categoryService.DeleteAsync(selectedCategory.Id);
+            if (result.IsFailure)
+            {
+                ShowCategoryError(result.Error!.Message);
+                return;
+            }
+
+            StartCategoryCreateMode();
+            await LoadCategoriesAsync();
+        }
+
+
+
 
     }
 
