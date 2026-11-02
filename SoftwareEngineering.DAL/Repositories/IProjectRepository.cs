@@ -18,4 +18,5 @@ public interface IProjectRepository
 
     Task UpdateAsync(Project project);
     Task DeleteAsync(Guid id);
+    Task AddMemberAsync(ProjectMember member);
 }

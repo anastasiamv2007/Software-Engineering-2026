@@ -12,6 +12,7 @@ namespace SoftwareEngineering.Client;
 public partial class ProjectsView : UserControl
 {
     private readonly IProjectService _projectService;
+    private readonly ProjectMemberService _projectMemberService;
     private readonly UserSession _userSession;
     private ProjectModel? _selectedProject;
     private bool _isCreateMode = false;
@@ -22,6 +23,7 @@ public partial class ProjectsView : UserControl
 
         var app = (App)Application.Current;
         _projectService = app.GetService<IProjectService>();
+        _projectMemberService = app.GetService<ProjectMemberService>();
         _userSession = app.GetService<UserSession>();
 
         // Оновлюємо список кожного разу, коли вкладка "Пул проєктів" стає видимою
@@ -72,6 +74,10 @@ public partial class ProjectsView : UserControl
 
             BtnDelete.Visibility = Visibility.Visible;
             DetailsPanel.Visibility = Visibility.Visible;
+
+            // ДОДАНО: Показуємо поле додавання співвиконавця та очищаємо його
+            CoExecutorPanel.Visibility = Visibility.Visible;
+            TxtCoExecutorEmail.Text = string.Empty;
         }
     }
 
@@ -89,6 +95,9 @@ public partial class ProjectsView : UserControl
         BtnDelete.Visibility = Visibility.Collapsed;
         DetailsPanel.Visibility = Visibility.Visible;
         TxtProjectName.Focus();
+
+        // ДОДАНО: Ховаємо панель співвиконавця, бо проєкт ще не створено
+        CoExecutorPanel.Visibility = Visibility.Collapsed;
     }
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
@@ -145,6 +154,40 @@ public partial class ProjectsView : UserControl
                     MessageBox.Show(ex.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
+        }
+    }
+    private async void BtnAddCoExecutor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedProject == null) return;
+
+        var email = TxtCoExecutorEmail.Text.Trim();
+        if (string.IsNullOrEmpty(email))
+        {
+            MessageBox.Show("Будь ласка, введіть email користувача.", "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+
+        try
+        {
+            // Викликаємо нашу нову бізнес-логіку з Result
+            var result = await _projectMemberService.AddCoExecutorAsync(_selectedProject.Id, email, currentUserId);
+
+            if (result.IsSuccess)
+            {
+                MessageBox.Show($"Користувача {email} успішно додано до проєкту!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+                TxtCoExecutorEmail.Text = string.Empty; // Очищаємо поле
+            }
+            else
+            {
+                // Якщо є помилка, показуємо повідомлення, яке повернув наш сервіс
+                MessageBox.Show(result.Error?.Message ?? "Невідома помилка", "Помилка додавання", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Критична помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }

@@ -11,12 +11,14 @@ public static class DependencyInjection
     {
         services.AddDataAccess(connectionString);
 
+        services.AddLogging();
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IDatabaseSetupService, DatabaseSetupService>();
         services.AddSingleton<IUserSession, UserSession>();
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<ProjectMemberService>();
         return services;
     }
 }
