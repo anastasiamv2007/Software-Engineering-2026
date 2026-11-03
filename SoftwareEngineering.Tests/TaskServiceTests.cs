@@ -240,6 +240,104 @@ public class TaskServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateAsync(CreateValidModel()));
     }
 
+    [Fact]
+    public async Task GetUserTasksAsync_ReturnsOnlyTasksFromRepositoryForThatUser()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        this.repositoryMock
+            .Setup(repository => repository.GetByUserAsync(userId))
+            .ReturnsAsync(new List<TaskItem> { new() { Id = Guid.NewGuid(), Title = "Моє", TaskCode = "PL-1" } });
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.GetUserTasksAsync(userId);
+
+        // Assert
+        Assert.Single(result);
+        this.repositoryMock.Verify(repository => repository.GetAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetDetailsAsync_ProjectOwner_ReturnsFullInfoAndAllRights()
+    {
+        // Arrange
+        var (task, owner, coExecutor) = CreateDetailedTask();
+        this.repositoryMock.Setup(repository => repository.GetDetailsAsync(task.Id)).ReturnsAsync(task);
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.GetDetailsAsync(task.Id, owner.Id);
+
+        // Assert
+        Assert.Equal("Лаб", result.ProjectName);
+        Assert.Equal(owner.FullName, result.ProjectOwnerName);
+        Assert.Equal(coExecutor.FullName, result.OwnerName);
+        Assert.Equal(1, result.SubtasksCompleted);
+        Assert.Equal(2, result.SubtasksTotal);
+        Assert.Equal(2, result.Members.Count);
+        Assert.Equal(ProjectRole.Owner, result.CurrentUserRole);
+        Assert.True(result.CanDeleteOrChangeDeadline);
+    }
+
+    [Fact]
+    public async Task GetDetailsAsync_CoExecutorOnForeignTask_CanEditButNotManage()
+    {
+        // Arrange
+        var (task, owner, _) = CreateDetailedTask();
+        task.OwnerId = owner.Id;
+        task.Owner = owner;
+        var otherCoExecutor = new User { Id = Guid.NewGuid(), FullName = "Інший", Email = "other@test.com" };
+        task.Project.Members.Add(new ProjectMember { UserId = otherCoExecutor.Id, User = otherCoExecutor, Role = ProjectRole.CoExecutor });
+        this.repositoryMock.Setup(repository => repository.GetDetailsAsync(task.Id)).ReturnsAsync(task);
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.GetDetailsAsync(task.Id, otherCoExecutor.Id);
+
+        // Assert
+        Assert.True(result.CanEdit);
+        Assert.False(result.CanDeleteOrChangeDeadline);
+    }
+
+    [Fact]
+    public async Task GetDetailsAsync_UserOutsideProject_ThrowsValidationException()
+    {
+        // Arrange
+        var (task, _, _) = CreateDetailedTask();
+        this.repositoryMock.Setup(repository => repository.GetDetailsAsync(task.Id)).ReturnsAsync(task);
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(() => service.GetDetailsAsync(task.Id, Guid.NewGuid()));
+    }
+
+    private static (TaskItem Task, User Owner, User CoExecutor) CreateDetailedTask()
+    {
+        var owner = new User { Id = Guid.NewGuid(), FullName = "Турчин Павло", Email = "pavlo@test.com" };
+        var coExecutor = new User { Id = Guid.NewGuid(), FullName = "Ihor Lihvan", Email = "ihor@test.com" };
+        var project = new Project { Id = Guid.NewGuid(), Name = "Лаб", OwnerId = owner.Id, Owner = owner };
+        project.Members.Add(new ProjectMember { UserId = owner.Id, User = owner, Role = ProjectRole.Owner });
+        project.Members.Add(new ProjectMember { UserId = coExecutor.Id, User = coExecutor, Role = ProjectRole.CoExecutor });
+
+        var task = new TaskItem
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = project.Id,
+            Project = project,
+            TaskCode = "PL-1",
+            Title = "лаб1",
+            OwnerId = coExecutor.Id,
+            Owner = coExecutor,
+            CreatorId = coExecutor.Id,
+            Deadline = DateTime.UtcNow.AddDays(1),
+        };
+        task.Subtasks.Add(new Subtask { Title = "a", IsCompleted = true });
+        task.Subtasks.Add(new Subtask { Title = "b" });
+
+        return (task, owner, coExecutor);
+    }
+
     private static TaskModel CreateValidModel()
     {
         return new TaskModel
