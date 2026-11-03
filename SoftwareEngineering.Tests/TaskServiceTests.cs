@@ -16,6 +16,8 @@ public class TaskServiceTests
 
     private readonly Mock<IProjectRepository> projectRepositoryMock = new();
 
+    private readonly Mock<ICategoryRepository> categoryRepositoryMock = new();
+
     public TaskServiceTests()
     {
         // За замовчуванням користувач — співвиконавець проєкту
@@ -240,6 +242,66 @@ public class TaskServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateAsync(CreateValidModel()));
     }
 
+    [Fact]
+    public async Task CreateAsync_ExistingCategory_SavesTaskWithCategory()
+    {
+        // Arrange
+        this.CaptureSavedTask();
+        this.categoryRepositoryMock
+            .Setup(repository => repository.GetByIdAsync(3))
+            .ReturnsAsync(new Category { Id = 3, Name = "Навчання", ColorHex = "#3B82F6" });
+        var model = CreateValidModel();
+        model.CategoryId = 3;
+        var service = this.CreateService();
+
+        // Act
+        await service.CreateAsync(model);
+
+        // Assert
+        Assert.Equal(3, this.savedTask!.CategoryId);
+    }
+
+    [Fact]
+    public async Task CreateAsync_MissingCategory_ThrowsAndDoesNotSave()
+    {
+        // Arrange
+        var model = CreateValidModel();
+        model.CategoryId = 42;
+        var service = this.CreateService();
+
+        // Act
+        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+
+        // Assert
+        this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_TaskWithCategory_MapsCategoryNameAndColor()
+    {
+        // Arrange
+        this.repositoryMock
+            .Setup(repository => repository.GetAsync())
+            .ReturnsAsync(new[]
+            {
+                new TaskItem
+                {
+                    Id = Guid.NewGuid(),
+                    Title = "Звіт",
+                    CategoryId = 1,
+                    Category = new Category { Id = 1, Name = "Робота", ColorHex = "#EF4444" },
+                },
+            });
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.GetAllAsync();
+
+        // Assert
+        Assert.Equal("Робота", result[0].CategoryName);
+        Assert.Equal("#EF4444", result[0].CategoryColorHex);
+    }
+
     private static TaskModel CreateValidModel()
     {
         return new TaskModel
@@ -253,7 +315,7 @@ public class TaskServiceTests
 
     private TaskService CreateService()
     {
-        return new TaskService(this.repositoryMock.Object, this.projectRepositoryMock.Object);
+        return new TaskService(this.repositoryMock.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
     }
 
     private void SetProjectRole(ProjectRole? role)
@@ -277,7 +339,7 @@ public class TaskServiceTests
     public async Task GetByIdAsync_EmptyId_ThrowsValidationException()
     {
         var mockRepo = new Mock<ITaskRepository>();
-        var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
+        var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
         var emptyId = Guid.Empty;
 
         var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(emptyId));
@@ -291,7 +353,7 @@ public class TaskServiceTests
         var fakeId = Guid.NewGuid();
 
         mockRepo.Setup(repo => repo.GetByIdAsync(fakeId)).ReturnsAsync((TaskItem?)null);
-        var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
+        var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(fakeId));
         Assert.Contains("не знайдено", exception.Message);
@@ -312,7 +374,7 @@ public class TaskServiceTests
         };
 
         mockRepo.Setup(repo => repo.GetByIdAsync(validId)).ReturnsAsync(fakeEntity);
-        var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
+        var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         var result = await service.GetByIdAsync(validId);
 
@@ -778,7 +840,7 @@ public class TaskServiceTests
         var mockRepo = new Mock<ITaskRepository>();
         mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ReturnsAsync(task);
 
-        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
+        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         // Act
         await taskService.DeleteTaskAsync(taskId, ownerId);
@@ -800,7 +862,7 @@ public class TaskServiceTests
         var mockRepo = new Mock<ITaskRepository>();
         mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ReturnsAsync(task);
 
-        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
+        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         // Act & Assert
         await Assert.ThrowsAsync<ValidationException>(() =>
@@ -822,7 +884,7 @@ public class TaskServiceTests
         // Виправлено: додано знак питання (TaskItem?) для Nullable типів
         mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ReturnsAsync((TaskItem?)null);
 
-        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object);
+        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         // Act & Assert
         await Assert.ThrowsAsync<ValidationException>(() =>

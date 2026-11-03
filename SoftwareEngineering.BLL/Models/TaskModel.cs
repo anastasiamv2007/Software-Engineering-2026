@@ -18,6 +18,11 @@ public class TaskModel : BaseModel
 
     public int? CategoryId { get; set; }
 
+    // Лише для відображення: заповнюється, якщо репозиторій підвантажив категорію
+    public string? CategoryName { get; set; }
+
+    public string? CategoryColorHex { get; set; }
+
     public TaskItemStatus Status { get; set; } = TaskItemStatus.Todo;
 
     public Guid OwnerId { get; set; }

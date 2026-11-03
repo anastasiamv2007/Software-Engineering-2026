@@ -145,7 +145,7 @@ namespace SoftwareEngineering.Client
             {
                 Status = GetSelectedEnum<TaskItemStatus>(FilterStatusComboBox),
                 Priority = GetSelectedEnum<TaskPriority>(FilterPriorityComboBox),
-                CategoryId = (FilterCategoryComboBox?.SelectedItem as ComboBoxItem)?.Tag as int?,
+                CategoryId = GetSelectedCategoryId(FilterCategoryComboBox),
                 OnlyOverdue = FilterOverdueCheckBox.IsChecked ?? false,
                 SortBy = GetSelectedEnum<TaskSortOption>(SortComboBox) ?? TaskSortOption.ByDeadlineAsc,
             };
@@ -181,22 +181,56 @@ namespace SoftwareEngineering.Client
         }
 
         /// <summary>
-        /// Оновлює список категорій у фільтрі, зберігаючи поточний вибір.
+        /// Оновлює списки категорій у фільтрі та формах завдання, зберігаючи поточний вибір.
         /// </summary>
-        private void RefreshCategoryFilter(IReadOnlyList<CategoryModel> categories)
+        private void RefreshCategoryLists(IReadOnlyList<CategoryModel> categories)
         {
-            var selectedId = (FilterCategoryComboBox.SelectedItem as ComboBoxItem)?.Tag as int?;
+            FillCategoryComboBox(FilterCategoryComboBox, categories, "Всі");
+            FillCategoryComboBox(CategoryComboBox, categories, "Без категорії");
+            FillCategoryComboBox(EditCategoryComboBox, categories, "Без категорії");
+        }
 
-            FilterCategoryComboBox.Items.Clear();
-            FilterCategoryComboBox.Items.Add(new ComboBoxItem { Content = "Всі" });
+        private static void FillCategoryComboBox(ComboBox comboBox, IReadOnlyList<CategoryModel> categories, string emptyText)
+        {
+            var selectedId = GetSelectedCategoryId(comboBox);
+
+            comboBox.Items.Clear();
+            comboBox.Items.Add(new ComboBoxItem { Content = emptyText });
             foreach (var category in categories)
             {
-                FilterCategoryComboBox.Items.Add(new ComboBoxItem { Content = category.Name, Tag = category.Id });
+                var item = new StackPanel { Orientation = Orientation.Horizontal };
+                item.Children.Add(new System.Windows.Shapes.Ellipse
+                {
+                    Width = 10,
+                    Height = 10,
+                    Margin = new Thickness(0, 0, 6, 0),
+                    Fill = ToBrush(category.ColorHex),
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+                item.Children.Add(new TextBlock { Text = category.Name });
+
+                comboBox.Items.Add(new ComboBoxItem { Content = item, Tag = category.Id });
             }
 
-            FilterCategoryComboBox.SelectedItem = FilterCategoryComboBox.Items
+            SelectCategory(comboBox, selectedId);
+        }
+
+        private static int? GetSelectedCategoryId(ComboBox comboBox)
+        {
+            return (comboBox.SelectedItem as ComboBoxItem)?.Tag as int?;
+        }
+
+        // Якщо категорії вже немає у списку (її видалили) — обирається порожній пункт
+        private static void SelectCategory(ComboBox comboBox, int? categoryId)
+        {
+            if (comboBox.Items.Count == 0)
+            {
+                return;
+            }
+
+            comboBox.SelectedItem = comboBox.Items
                 .OfType<ComboBoxItem>()
-                .FirstOrDefault(item => item.Tag as int? == selectedId) ?? FilterCategoryComboBox.Items[0];
+                .FirstOrDefault(item => item.Tag as int? == categoryId) ?? comboBox.Items[0];
         }
 
         private void OnFilterChanged(object sender, RoutedEventArgs e)
@@ -277,6 +311,7 @@ namespace SoftwareEngineering.Client
                     Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
                     Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
                     Priority = priority,
+                    CategoryId = GetSelectedCategoryId(CategoryComboBox),
                     Status = TaskItemStatus.Todo,
                 });
 
@@ -284,6 +319,7 @@ namespace SoftwareEngineering.Client
 
                 TitleTextBox.Clear();
                 DescriptionTextBox.Clear();
+                CategoryComboBox.SelectedIndex = 0;
                 await LoadTasksAsync();
                 ShowPage("Tasks");
                 NavTasks.IsChecked = true;
@@ -309,6 +345,9 @@ namespace SoftwareEngineering.Client
                     DetailsTitleText.Text = task.Title;
                     DetailsStatusText.Text = $"Статус: {task.Status} | Пріоритет: {task.Priority}";
                     DetailsDescriptionText.Text = string.IsNullOrWhiteSpace(task.Description) ? "Немає опису" : task.Description;
+                    // GetByIdAsync не підвантажує категорію, тому назву й колір беремо з рядка списку
+                    DetailsCategoryText.Text = $"Категорія: {selected.CategoryName ?? "без категорії"}";
+                    DetailsCategoryDot.Fill = selected.CategoryColorHex is null ? Brushes.Transparent : ToBrush(selected.CategoryColorHex);
                     DetailsDeadlineText.Text = task.Deadline.HasValue ? $"Дедлайн: {task.Deadline.Value:dd.MM.yyyy HH:mm}" : "Дедлайн: Не вказано";
 
                     ShowPage("Details");
@@ -363,6 +402,8 @@ namespace SoftwareEngineering.Client
                     }
                 }
 
+                SelectCategory(EditCategoryComboBox, selected.CategoryId);
+
                 ShowPage("Edit");
             }
             else
@@ -388,6 +429,7 @@ namespace SoftwareEngineering.Client
                 currentSelectedTask.Description = EditDescriptionTextBox.Text?.Trim() ?? string.Empty;
                 currentSelectedTask.Deadline = KeepTimeIfSameDay(currentSelectedTask.Deadline, EditDeadlineDatePicker.SelectedDate);
                 currentSelectedTask.Priority = priority;
+                currentSelectedTask.CategoryId = GetSelectedCategoryId(EditCategoryComboBox);
 
                 await taskService.UpdateAsync(currentSelectedTask, CurrentUserId);
 
@@ -505,7 +547,17 @@ namespace SoftwareEngineering.Client
             }
 
             CatList.ItemsSource = result.Value;
-            RefreshCategoryFilter(result.Value!);
+            RefreshCategoryLists(result.Value!);
+        }
+
+        /// <summary>
+        /// Після зміни категорії оновлюємо і завдання: у них показуються назва та колір категорії.
+        /// </summary>
+        private async Task ReloadAfterCategoryChangeAsync()
+        {
+            StartCategoryCreateMode();
+            await LoadCategoriesAsync();
+            await LoadTasksAsync();
         }
 
         private void BuildCategoryPalette()
@@ -600,8 +652,7 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            StartCategoryCreateMode();
-            await LoadCategoriesAsync();
+            await ReloadAfterCategoryChangeAsync();
         }
 
         private async void CatDelete_Click(object sender, RoutedEventArgs e)
@@ -629,8 +680,7 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            StartCategoryCreateMode();
-            await LoadCategoriesAsync();
+            await ReloadAfterCategoryChangeAsync();
         }
 
 
