@@ -295,6 +295,16 @@
                               Background="White" RowHeight="48" CanUserAddRows="False">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="НАЗВА ЗАВДАННЯ" Binding="{Binding Title}" Width="*"/>
+                            <DataGridTemplateColumn Header="КАТЕГОРІЯ" Width="150">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Ellipse Width="10" Height="10" Margin="0,0,6,0" Fill="{Binding CategoryColorHex, TargetNullValue=Transparent}"/>
+                                            <TextBlock Text="{Binding CategoryName, TargetNullValue='—'}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="ДЕДЛАЙН" Binding="{Binding Deadline, StringFormat=dd.MM.yyyy HH:mm}" Width="140"/>
                             <DataGridTextColumn Header="ПРІОРИТЕТ" Binding="{Binding Priority}" Width="110"/>
                             <DataGridTextColumn Header="СТАТУС" Binding="{Binding Status}" Width="110"/>
@@ -338,6 +348,9 @@
                                     </ComboBox>
                                 </StackPanel>
                             </Grid>
+
+                            <TextBlock Text="Категорія" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="CategoryComboBox" Height="34" VerticalContentAlignment="Center" Margin="0,0,0,12"/>
 
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                                 <Button Content="Скасувати" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="CancelToTasks_Click"/>
@@ -456,6 +469,9 @@
                                     </ComboBox>
                                 </StackPanel>
                             </Grid>
+
+                            <TextBlock Text="Категорія" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="EditCategoryComboBox" Height="34" VerticalContentAlignment="Center" Margin="0,0,0,12"/>
 
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                                 <Button Content="Скасувати" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="CancelToTasks_Click"/>

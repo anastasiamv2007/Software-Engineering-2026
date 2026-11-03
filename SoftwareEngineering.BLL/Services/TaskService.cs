@@ -16,11 +16,13 @@ public class TaskService : BaseService, ITaskService
 
     private readonly ITaskRepository taskRepository;
     private readonly IProjectRepository projectRepository;
+    private readonly ICategoryRepository categoryRepository;
 
-    public TaskService(ITaskRepository taskRepository, IProjectRepository projectRepository)
+    public TaskService(ITaskRepository taskRepository, IProjectRepository projectRepository, ICategoryRepository categoryRepository)
     {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
+        this.categoryRepository = categoryRepository;
     }
 
     public async Task<IReadOnlyList<TaskModel>> GetAllAsync()
@@ -108,6 +110,7 @@ public class TaskService : BaseService, ITaskService
             this.ValidateCondition(
                 role is ProjectRole.Owner or ProjectRole.CoExecutor,
                 "Створювати завдання можуть лише власник проєкту та співвиконавці.");
+            await this.ValidateCategoryAsync(model.CategoryId);
 
             var entity = await this.BuildEntityAsync(model);
             await this.taskRepository.AddAsync(entity);
@@ -153,6 +156,11 @@ public class TaskService : BaseService, ITaskService
                 this.ValidateCondition(
                     CanManage(entity, currentUserId, role),
                     "Змінювати дедлайн чужого завдання може лише власник проєкту.");
+            }
+
+            if (model.CategoryId != entity.CategoryId)
+            {
+                await this.ValidateCategoryAsync(model.CategoryId);
             }
 
             entity.Title = model.Title.Trim();
@@ -307,9 +315,23 @@ public class TaskService : BaseService, ITaskService
             Deadline = entity.Deadline,
             Priority = entity.Priority,
             CategoryId = entity.CategoryId,
+            CategoryName = entity.Category?.Name,
+            CategoryColorHex = entity.Category?.ColorHex,
             Status = entity.Status,
             OwnerId = entity.OwnerId,
         };
+    }
+
+    /// <summary>
+    /// Категорію могли видалити, поки форма була відкрита, — перевіряємо до запису в БД.
+    /// </summary>
+    private async Task ValidateCategoryAsync(int? categoryId)
+    {
+        if (categoryId.HasValue)
+        {
+            var category = await this.categoryRepository.GetByIdAsync(categoryId.Value);
+            this.ValidateCondition(category != null, "Обрану категорію не знайдено. Оновіть список категорій.");
+        }
     }
 
     private void ValidateNewTask(TaskModel model)
