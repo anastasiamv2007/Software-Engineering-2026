@@ -290,7 +290,7 @@
                 </StackPanel>
 
                 <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
-                    <DataGrid x:Name="TasksDataGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
+                    <DataGrid x:Name="TasksDataGrid" MouseDoubleClick="TasksDataGrid_MouseDoubleClick" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="0"
                               Background="White" RowHeight="48" CanUserAddRows="False">
                         <DataGrid.Columns>
@@ -366,22 +366,74 @@
                 <StackPanel>
                     <TextBlock Text="Деталі завдання" Style="{StaticResource PageTitle}"/>
                     <TextBlock Text="Повний перегляд вибраного завдання" Style="{StaticResource PageSubtitle}"/>
-                    <Border Style="{StaticResource Card}">
+                    <!-- Заголовок: код, назва, статус, пріоритет -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                         <StackPanel x:Name="DetailsContainer">
-                            <TextBlock x:Name="DetailsTitleText" FontSize="20" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,8"/>
-                            <TextBlock x:Name="DetailsStatusText" FontSize="14" Foreground="#64748B" Margin="0,0,0,8"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                                <Ellipse x:Name="DetailsCategoryDot" Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="DetailsCategoryText" FontSize="14" Foreground="#64748B"/>
-                            </StackPanel>
-                            <TextBlock Text="Опис:" Style="{StaticResource FieldLabel}"/>
-                            <Border Background="#F1F5F9" CornerRadius="8" Padding="12" Margin="0,0,0,16">
-                                <TextBlock x:Name="DetailsDescriptionText" TextWrapping="Wrap" FontSize="14" Foreground="#334155"/>
-                            </Border>
-                            <TextBlock x:Name="DetailsDeadlineText" FontSize="14" FontWeight="SemiBold" Foreground="#2563EB" Margin="0,0,0,20"/>
-                            <Button Content="Назад до списку" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Click="CancelToTasks_Click"/>
+                            <TextBlock x:Name="DetailsCodeText" FontSize="12" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="DetailsTitleText" FontSize="22" FontWeight="Bold" Foreground="#0F172A" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                            <WrapPanel x:Name="DetailsBadges"/>
                         </StackPanel>
                     </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="3*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="2*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Опис" Style="{StaticResource FieldLabel}"/>
+                                    <Border Background="#F1F5F9" CornerRadius="8" Padding="12" Margin="0,0,0,16">
+                                        <TextBlock x:Name="DetailsDescriptionText" TextWrapping="Wrap" FontSize="14" Foreground="#334155"/>
+                                    </Border>
+                                    <TextBlock Text="Прогрес" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock x:Name="DetailsSubtasksText" FontSize="14" Foreground="#334155" Margin="0,0,0,6"/>
+                                    <ProgressBar x:Name="DetailsSubtasksProgress" Height="8" Maximum="100" Margin="0,0,0,12"/>
+                                    <TextBlock x:Name="DetailsCommentsText" FontSize="14" Foreground="#334155"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Учасники проєкту" Style="{StaticResource FieldLabel}"/>
+                                    <ItemsControl x:Name="DetailsMembersList">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <DockPanel Margin="0,6">
+                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Role}" Foreground="#64748B" VerticalAlignment="Center"/>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding FullName}" FontWeight="SemiBold" Foreground="#0F172A"/>
+                                                        <TextBlock Text="{Binding Email}" FontSize="12" Foreground="#64748B"/>
+                                                    </StackPanel>
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Довідкова інформація: заповнюється з коду рядками «назва — значення» -->
+                        <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
+                            <StackPanel>
+                                <TextBlock Text="Інформація" Style="{StaticResource FieldLabel}"/>
+                                <Grid x:Name="DetailsInfoGrid" Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Content="Назад до списку" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="CancelToTasks_Click"/>
+                        <Button x:Name="DetailsEditButton" Content="Редагувати" Style="{StaticResource PrimaryButton}" Click="GoToEdit_Click"/>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
 

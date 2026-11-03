@@ -43,4 +43,6 @@ public class TaskItem
     public ICollection<ActivityLog> ActivityLogs { get; set; } = new List<ActivityLog>();
 
     public Guid OwnerId { get; set; }
+
+    public User Owner { get; set; } = null!;
 }

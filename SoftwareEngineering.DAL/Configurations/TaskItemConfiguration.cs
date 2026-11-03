@@ -37,7 +37,7 @@ public class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
             .HasForeignKey(t => t.AssigneeId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        builder.HasOne<User>()
+        builder.HasOne(t => t.Owner)
             .WithMany()
             .HasForeignKey(t => t.OwnerId)
             .OnDelete(DeleteBehavior.Restrict);

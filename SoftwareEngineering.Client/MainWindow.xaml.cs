@@ -55,6 +55,17 @@ namespace SoftwareEngineering.Client
             };
         }
 
+        private void TasksDataGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Подвійний клік по заголовку чи смузі прокрутки не має відкривати деталі вибраного раніше рядка
+            var row = ItemsControl.ContainerFromElement(TasksDataGrid, (DependencyObject)e.OriginalSource) as DataGridRow;
+            if (row?.Item is TaskModel)
+            {
+                // Та сама логіка, що й у кнопки "Деталі"
+                GoToDetails_Click(sender, new RoutedEventArgs());
+            }
+        }
+
         private Guid CurrentUserId => userSession.CurrentUserId ?? Guid.Empty;
 
         // "Іван Петренко" -> "ІП"; логування виходу вже є всередині App.SignOut / SignOutAndDisconnect
@@ -127,7 +138,8 @@ namespace SoftwareEngineering.Client
         {
             try
             {
-                allTasks = await taskService.GetAllAsync();
+                // Лише завдання проєктів, де користувач — власник або співвиконавець
+                allTasks = await taskService.GetUserTasksAsync(CurrentUserId);
                 ApplyFilter();
                 UpdateStats();
             }
@@ -340,17 +352,12 @@ namespace SoftwareEngineering.Client
             {
                 try
                 {
-                    var task = await taskService.GetByIdAsync(selected.Id);
-
-                    DetailsTitleText.Text = task.Title;
-                    DetailsStatusText.Text = $"Статус: {task.Status} | Пріоритет: {task.Priority}";
-                    DetailsDescriptionText.Text = string.IsNullOrWhiteSpace(task.Description) ? "Немає опису" : task.Description;
-                    // GetByIdAsync не підвантажує категорію, тому назву й колір беремо з рядка списку
-                    DetailsCategoryText.Text = $"Категорія: {selected.CategoryName ?? "без категорії"}";
-                    DetailsCategoryDot.Fill = selected.CategoryColorHex is null ? Brushes.Transparent : ToBrush(selected.CategoryColorHex);
-                    DetailsDeadlineText.Text = task.Deadline.HasValue ? $"Дедлайн: {task.Deadline.Value:dd.MM.yyyy HH:mm}" : "Дедлайн: Не вказано";
-
+                    ShowTaskDetails(await taskService.GetDetailsAsync(selected.Id, CurrentUserId));
                     ShowPage("Details");
+                }
+                catch (ValidationException ex)
+                {
+                    MessageBox.Show(ex.Message, "Немає доступу", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 catch (Exception ex)
                 {
@@ -362,6 +369,113 @@ namespace SoftwareEngineering.Client
                 MessageBox.Show("Виберіть завдання зі списку.", "Увага", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
+
+        private void ShowTaskDetails(TaskDetailsModel details)
+        {
+            var task = details.Task;
+
+            DetailsCodeText.Text = $"{task.TaskCode} · {details.ProjectName}";
+            DetailsTitleText.Text = task.Title;
+
+            DetailsBadges.Children.Clear();
+            DetailsBadges.Children.Add(CreateBadge(StatusText(task.Status), "#DBEAFE", "#1D4ED8"));
+            DetailsBadges.Children.Add(CreateBadge($"Пріоритет: {PriorityText(task.Priority)}", "#F1F5F9", "#334155"));
+            if (details.IsOverdue)
+            {
+                DetailsBadges.Children.Add(CreateBadge("Прострочено", "#FEE2E2", "#B91C1C"));
+            }
+
+            if (details.CategoryName != null)
+            {
+                DetailsBadges.Children.Add(CreateBadge(details.CategoryName, details.CategoryColorHex ?? "#E2E8F0", "#FFFFFF"));
+            }
+
+            DetailsDescriptionText.Text = string.IsNullOrWhiteSpace(task.Description) ? "Немає опису" : task.Description;
+
+            DetailsSubtasksText.Text = details.SubtasksTotal == 0
+                ? "Підзадач немає"
+                : $"Підзадачі: виконано {details.SubtasksCompleted} з {details.SubtasksTotal}";
+            DetailsSubtasksProgress.Value = details.SubtasksTotal == 0 ? 0 : details.SubtasksCompleted * 100.0 / details.SubtasksTotal;
+            DetailsCommentsText.Text = $"Коментарів: {details.CommentsCount}";
+
+            DetailsMembersList.ItemsSource = details.Members
+                .Select(member => new { member.FullName, member.Email, Role = RoleText(member.Role) })
+                .ToList();
+
+            DetailsInfoGrid.Children.Clear();
+            DetailsInfoGrid.RowDefinitions.Clear();
+            AddInfoRow("Проєкт", details.ProjectName);
+            AddInfoRow("Власник проєкту", details.ProjectOwnerName);
+            AddInfoRow("Власник завдання", $"{details.OwnerName}\n{details.OwnerEmail}");
+            if (details.CreatorName != null && details.CreatorName != details.OwnerName)
+            {
+                AddInfoRow("Автор", details.CreatorName);
+            }
+
+            AddInfoRow("Виконавець", details.AssigneeName ?? "Не призначено");
+            AddInfoRow("Категорія", details.CategoryName ?? "Без категорії");
+            AddInfoRow("Дедлайн", task.Deadline.HasValue ? task.Deadline.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "Не вказано");
+            AddInfoRow("Створено", details.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"));
+            AddInfoRow("Ваша роль", details.CurrentUserRole.HasValue ? RoleText(details.CurrentUserRole.Value) : "Автор завдання");
+            AddInfoRow("Ваші права", details.CanDeleteOrChangeDeadline
+                ? "Редагування, дедлайн, видалення"
+                : details.CanEdit ? "Редагування (без дедлайну та видалення)" : "Лише перегляд");
+
+            DetailsEditButton.IsEnabled = details.CanEdit;
+        }
+
+        private void AddInfoRow(string label, string value)
+        {
+            var row = DetailsInfoGrid.RowDefinitions.Count;
+            DetailsInfoGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var labelText = new TextBlock { Text = label, Foreground = ToBrush("#64748B"), Margin = new Thickness(0, 6, 12, 6) };
+            var valueText = new TextBlock { Text = value, Foreground = ToBrush("#0F172A"), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 6) };
+            Grid.SetRow(labelText, row);
+            Grid.SetRow(valueText, row);
+            Grid.SetColumn(valueText, 1);
+
+            DetailsInfoGrid.Children.Add(labelText);
+            DetailsInfoGrid.Children.Add(valueText);
+        }
+
+        private static Border CreateBadge(string text, string background, string foreground)
+        {
+            return new Border
+            {
+                Background = ToBrush(background),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(10, 3, 10, 3),
+                Margin = new Thickness(0, 0, 8, 4),
+                Child = new TextBlock { Text = text, Foreground = ToBrush(foreground), FontSize = 12, FontWeight = FontWeights.SemiBold },
+            };
+        }
+
+        private static string StatusText(TaskItemStatus status) => status switch
+        {
+            TaskItemStatus.Todo => "До виконання",
+            TaskItemStatus.InProgress => "В процесі",
+            TaskItemStatus.InReview => "На перевірці",
+            TaskItemStatus.NeedsRevision => "Потребує доопрацювання",
+            TaskItemStatus.Done => "Виконано",
+            _ => status.ToString(),
+        };
+
+        private static string PriorityText(TaskPriority priority) => priority switch
+        {
+            TaskPriority.High => "високий",
+            TaskPriority.Medium => "середній",
+            TaskPriority.Low => "низький",
+            _ => priority.ToString(),
+        };
+
+        private static string RoleText(ProjectRole role) => role switch
+        {
+            ProjectRole.Owner => "Власник",
+            ProjectRole.CoExecutor => "Співвиконавець",
+            ProjectRole.Reviewer => "Рецензент",
+            _ => role.ToString(),
+        };
 
         private async void EditTaskMenuItem_Click(object sender, RoutedEventArgs e)
         {
