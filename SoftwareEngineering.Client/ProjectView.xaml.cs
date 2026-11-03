@@ -12,6 +12,7 @@ namespace SoftwareEngineering.Client;
 public partial class ProjectsView : UserControl
 {
     private readonly IProjectService _projectService;
+    private readonly IProjectMemberService _projectMemberService;
     private readonly UserSession _userSession;
     private ProjectModel? _selectedProject;
     private bool _isCreateMode = false;
@@ -22,6 +23,7 @@ public partial class ProjectsView : UserControl
 
         var app = (App)Application.Current;
         _projectService = app.GetService<IProjectService>();
+        _projectMemberService = app.GetService<IProjectMemberService>();
         _userSession = app.GetService<UserSession>();
 
         // Оновлюємо список кожного разу, коли вкладка "Пул проєктів" стає видимою
@@ -70,7 +72,16 @@ public partial class ProjectsView : UserControl
             TxtTasksCount.Text = selected.TasksCount.ToString();
             TxtCreatedAt.Text = selected.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 
-            BtnDelete.Visibility = Visibility.Visible;
+            // Редагувати, видаляти проєкт і додавати співвиконавців може лише власник
+            var isOwner = selected.OwnerId == (_userSession.CurrentUser?.Id ?? Guid.Empty);
+            var ownerOnly = isOwner ? Visibility.Visible : Visibility.Collapsed;
+
+            TxtProjectName.IsReadOnly = !isOwner;
+            BtnSave.Visibility = ownerOnly;
+            BtnDelete.Visibility = ownerOnly;
+            CoExecutorPanel.Visibility = ownerOnly;
+            TxtCoExecutorEmail.Text = string.Empty;
+
             DetailsPanel.Visibility = Visibility.Visible;
         }
     }
@@ -86,7 +97,13 @@ public partial class ProjectsView : UserControl
         TxtTasksCount.Text = "0";
         TxtCreatedAt.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm");
 
+        TxtProjectName.IsReadOnly = false;
+        BtnSave.Visibility = Visibility.Visible;
         BtnDelete.Visibility = Visibility.Collapsed;
+
+        // Співвиконавців можна додати лише до вже створеного проєкту
+        CoExecutorPanel.Visibility = Visibility.Collapsed;
+
         DetailsPanel.Visibility = Visibility.Visible;
         TxtProjectName.Focus();
     }
@@ -115,7 +132,7 @@ public partial class ProjectsView : UserControl
                     Name = TxtProjectName.Text
                 };
 
-                await _projectService.UpdateProjectAsync(updateModel);
+                await _projectService.UpdateProjectAsync(updateModel, currentUserId);
             }
 
             await LoadProjectsAsync();
@@ -137,7 +154,8 @@ public partial class ProjectsView : UserControl
             {
                 try
                 {
-                    await _projectService.DeleteProjectAsync(_selectedProject.Id);
+                    var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+                    await _projectService.DeleteProjectAsync(_selectedProject.Id, currentUserId);
                     await LoadProjectsAsync();
                 }
                 catch (Exception ex)
@@ -145,6 +163,27 @@ public partial class ProjectsView : UserControl
                     MessageBox.Show(ex.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
+        }
+    }
+
+    private async void BtnAddCoExecutor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedProject == null) return;
+
+        var email = TxtCoExecutorEmail.Text.Trim();
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+
+        // Сервіс сам перевіряє email і права та не кидає винятків — помилка приходить у Result
+        var result = await _projectMemberService.AddCoExecutorAsync(_selectedProject.Id, email, currentUserId);
+
+        if (result.IsSuccess)
+        {
+            MessageBox.Show($"Користувача {email} успішно додано до проєкту!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+            TxtCoExecutorEmail.Text = string.Empty;
+        }
+        else
+        {
+            MessageBox.Show(result.Error?.Message ?? "Невідома помилка", "Помилка додавання", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 }

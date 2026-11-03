@@ -2,9 +2,13 @@
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
+using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Enums;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+
 
 namespace SoftwareEngineering.Client
 {
@@ -15,48 +19,78 @@ namespace SoftwareEngineering.Client
         private readonly IUserSession userSession;
         private IReadOnlyList<TaskModel> allTasks = new List<TaskModel>();
         private TaskModel? currentSelectedTask;
+        private readonly ICategoryService categoryService;
+        private CategoryModel? selectedCategory;
+        private string selectedCategoryColor = CategoryPalette[0];
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession)
+        private static readonly string[] CategoryPalette =
+        {
+            "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
+        };
+
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
             this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
+            this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
+            BuildCategoryPalette();
+            StartCategoryCreateMode();
 
             // Поточний користувач береться із сесії, а не вводиться вручну
             UserNameText.Text = userSession.CurrentUser?.FullName ?? "Користувач";
+            UserInitialsText.Text = GetInitials(userSession.CurrentUser?.FullName);
             ProgUserIdTextBox.Text = CurrentUserId.ToString();
             ProgUserIdTextBox.IsReadOnly = true;
             DelUserIdTextBox.Text = CurrentUserId.ToString();
             DelUserIdTextBox.IsReadOnly = true;
 
             DeadlineDatePicker.SelectedDate = DateTime.Now.AddDays(1);
-            Loaded += async (_, _) => await LoadTasksAsync();
+            Loaded += async (_, _) =>
+            {
+                // Категорії потрібні для фільтра на сторінці завдань
+                await LoadCategoriesAsync();
+                await LoadTasksAsync();
+            };
         }
-        
-        /// <summary>
-    
+
         private void TasksDataGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            // Перевіряємо, чи клікнули саме по завданню
-            if (TasksDataGrid.SelectedItem is TaskModel)
+            // Подвійний клік по заголовку чи смузі прокрутки не має відкривати деталі вибраного раніше рядка
+            var row = ItemsControl.ContainerFromElement(TasksDataGrid, (DependencyObject)e.OriginalSource) as DataGridRow;
+            if (row?.Item is TaskModel)
             {
-                // Викликаємо твою готову логіку кнопки "Деталі"
+                // Та сама логіка, що й у кнопки "Деталі"
                 GoToDetails_Click(sender, new RoutedEventArgs());
             }
         }
 
         private Guid CurrentUserId => userSession.CurrentUserId ?? Guid.Empty;
 
-        // Готові обробники для кнопок виходу — прив'яжіть у XAML через Click="SignOut_Click" / Click="SignOutAndDisconnect_Click"
+        // "Іван Петренко" -> "ІП"; логування виходу вже є всередині App.SignOut / SignOutAndDisconnect
+        private static string GetInitials(string? fullName)
+        {
+            var parts = (fullName ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length == 0 ? "?" : string.Concat(parts.Take(2).Select(part => char.ToUpperInvariant(part[0])));
+        }
+
         private void SignOut_Click(object sender, RoutedEventArgs e)
         {
-            ((App)Application.Current).SignOut();
+            var result = MessageBox.Show("Ви дійсно хочете вийти з облікового запису?", "Вихід", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                ((App)Application.Current).SignOut();
+            }
         }
 
         private void SignOutAndDisconnect_Click(object sender, RoutedEventArgs e)
         {
-            ((App)Application.Current).SignOutAndDisconnect();
+            var result = MessageBox.Show("Вийти з облікового запису та обрати іншу базу даних?", "Змінити базу", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                ((App)Application.Current).SignOutAndDisconnect();
+            }
         }
 
         // DatePicker повертає лише дату — якщо день не змінився, лишаємо початковий дедлайн разом із часом
@@ -80,6 +114,12 @@ namespace SoftwareEngineering.Client
             foreach (FrameworkElement element in PagesHost.Children)
             {
                 element.Visibility = element.Name == $"Page_{page}" ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            // Список категорій оновлюємо щоразу, коли відкривається вкладка
+            if (page == "Categories")
+            {
+                _ = LoadCategoriesAsync();
             }
 
             if (page == "Projects")
@@ -110,10 +150,84 @@ namespace SoftwareEngineering.Client
 
         private void ApplyFilter()
         {
+            if (allTasks == null) return;
+
+            var criteria = new TaskFilterCriteria
+            {
+                Status = GetSelectedEnum<TaskItemStatus>(FilterStatusComboBox),
+                Priority = GetSelectedEnum<TaskPriority>(FilterPriorityComboBox),
+                CategoryId = (FilterCategoryComboBox?.SelectedItem as ComboBoxItem)?.Tag as int?,
+                OnlyOverdue = FilterOverdueCheckBox.IsChecked ?? false,
+                SortBy = GetSelectedEnum<TaskSortOption>(SortComboBox) ?? TaskSortOption.ByDeadlineAsc,
+            };
+
+            var filterResult = TaskFilter.Apply(allTasks, criteria);
+            if (filterResult.IsFailure)
+            {
+                Log.Warning("Помилка фільтрації задач: {Error}", filterResult.Error!.Message);
+                return;
+            }
+
+            IReadOnlyList<TaskModel> filteredList = filterResult.Value!;
+
+            // Пошук за назвою працює поверх фільтрів
             var query = SearchBox.Text?.Trim() ?? string.Empty;
-            TasksDataGrid.ItemsSource = string.IsNullOrEmpty(query)
-              ? allTasks
-              : allTasks.Where(t => t.Title.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (!string.IsNullOrEmpty(query))
+            {
+                filteredList = filteredList.Where(t => t.Title.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            TasksDataGrid.ItemsSource = filteredList;
+        }
+
+        private static T? GetSelectedEnum<T>(ComboBox comboBox) where T : struct
+        {
+            if (comboBox?.SelectedItem is ComboBoxItem { Tag: not null } selectedItem &&
+                Enum.TryParse(selectedItem.Tag.ToString(), out T result))
+            {
+                return result;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Оновлює список категорій у фільтрі, зберігаючи поточний вибір.
+        /// </summary>
+        private void RefreshCategoryFilter(IReadOnlyList<CategoryModel> categories)
+        {
+            var selectedId = (FilterCategoryComboBox.SelectedItem as ComboBoxItem)?.Tag as int?;
+
+            FilterCategoryComboBox.Items.Clear();
+            FilterCategoryComboBox.Items.Add(new ComboBoxItem { Content = "Всі" });
+            foreach (var category in categories)
+            {
+                FilterCategoryComboBox.Items.Add(new ComboBoxItem { Content = category.Name, Tag = category.Id });
+            }
+
+            FilterCategoryComboBox.SelectedItem = FilterCategoryComboBox.Items
+                .OfType<ComboBoxItem>()
+                .FirstOrDefault(item => item.Tag as int? == selectedId) ?? FilterCategoryComboBox.Items[0];
+        }
+
+        private void OnFilterChanged(object sender, RoutedEventArgs e)
+        {
+            if (IsLoaded)
+            {
+                ApplyFilter();
+            }
+        }
+
+        private void OnClearFiltersClicked(object sender, RoutedEventArgs e)
+        {
+            FilterStatusComboBox.SelectedIndex = 0;
+            FilterPriorityComboBox.SelectedIndex = 0;
+            FilterCategoryComboBox.SelectedIndex = 0;
+            SortComboBox.SelectedIndex = 0;
+            FilterOverdueCheckBox.IsChecked = false;
+            SearchBox.Text = string.Empty;
+
+            ApplyFilter();
         }
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -385,5 +499,153 @@ namespace SoftwareEngineering.Client
                 DelStatusText.Text = $"[ПОМИЛКА]: {ex.Message}";
             }
         }
+
+        // ---------- Категорії ----------
+        private static Brush ToBrush(string hex)
+        {
+            return (Brush)new BrushConverter().ConvertFromString(hex)!;
+        }
+
+        private async Task LoadCategoriesAsync()
+        {
+            var result = await categoryService.GetAllAsync();
+            if (result.IsFailure)
+            {
+                ShowCategoryError(result.Error!.Message);
+                return;
+            }
+
+            CatList.ItemsSource = result.Value;
+            RefreshCategoryFilter(result.Value!);
+        }
+
+        private void BuildCategoryPalette()
+        {
+            foreach (var hex in CategoryPalette)
+            {
+                var button = new Button
+                {
+                    Width = 26,
+                    Height = 26,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    Background = ToBrush(hex),
+                    BorderThickness = new Thickness(0),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Tag = hex,
+                };
+                button.Click += (_, _) => SelectCategoryColor(hex);
+                CatPalette.Children.Add(button);
+            }
+        }
+
+        private void SelectCategoryColor(string hex)
+        {
+            selectedCategoryColor = hex;
+            CatPreviewDot.Fill = ToBrush(hex);
+
+            foreach (Button button in CatPalette.Children)
+            {
+                button.BorderThickness = new Thickness((string)button.Tag == hex ? 3 : 0);
+                button.BorderBrush = Brushes.Black;
+            }
+        }
+
+        private void StartCategoryCreateMode()
+        {
+            selectedCategory = null;
+            CatList.SelectedItem = null;
+            CatHeader.Text = "Створити категорію";
+            CatSaveButton.Content = "Додати категорію";
+            CatDeleteButton.Visibility = Visibility.Collapsed;
+            CatName.Text = string.Empty;
+            CatError.Visibility = Visibility.Collapsed;
+            SelectCategoryColor(CategoryPalette[0]);
+        }
+
+        private void ShowCategoryError(string message)
+        {
+            CatError.Text = message;
+            CatError.Visibility = Visibility.Visible;
+        }
+
+        private void CatList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CatList.SelectedItem is not CategoryModel category)
+            {
+                return;
+            }
+
+            selectedCategory = category;
+            CatHeader.Text = "Редагування категорії";
+            CatSaveButton.Content = "Зберегти зміни";
+            CatDeleteButton.Visibility = Visibility.Visible;
+            CatName.Text = category.Name;
+            CatError.Visibility = Visibility.Collapsed;
+            SelectCategoryColor(category.ColorHex);
+        }
+
+        private void CatName_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (CatPreviewText != null)
+            {
+                CatPreviewText.Text = string.IsNullOrWhiteSpace(CatName.Text) ? "Поки що без назви" : CatName.Text.Trim();
+            }
+        }
+
+        private void CatCancel_Click(object sender, RoutedEventArgs e)
+        {
+            StartCategoryCreateMode();
+        }
+
+        private async void CatSave_Click(object sender, RoutedEventArgs e)
+        {
+            CatError.Visibility = Visibility.Collapsed;
+
+            Result result = selectedCategory is null
+                ? await categoryService.CreateAsync(new CreateCategoryModel { Name = CatName.Text, ColorHex = selectedCategoryColor })
+                : await categoryService.UpdateAsync(new UpdateCategoryModel { Id = selectedCategory.Id, Name = CatName.Text, ColorHex = selectedCategoryColor });
+
+            if (result.IsFailure)
+            {
+                ShowCategoryError(result.Error!.Message);
+                return;
+            }
+
+            StartCategoryCreateMode();
+            await LoadCategoriesAsync();
+        }
+
+        private async void CatDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (selectedCategory is null)
+            {
+                return;
+            }
+
+            var answer = MessageBox.Show(
+                $"Видалити категорію \"{selectedCategory.Name}\"? У завданнях категорію буде скинуто.",
+                "Підтвердження",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (answer != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var result = await categoryService.DeleteAsync(selectedCategory.Id);
+            if (result.IsFailure)
+            {
+                ShowCategoryError(result.Error!.Message);
+                return;
+            }
+
+            StartCategoryCreateMode();
+            await LoadCategoriesAsync();
+        }
+
+
+
+
     }
 }

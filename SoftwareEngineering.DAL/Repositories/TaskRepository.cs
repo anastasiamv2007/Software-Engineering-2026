@@ -28,7 +28,7 @@ public class TaskRepository : ITaskRepository
     public async Task<IEnumerable<TaskItem>> GetAsync()
     {
         await using var context = await this.contextFactory.CreateDbContextAsync();
-        return await context.Tasks.AsNoTracking().ToListAsync();
+        return await context.Tasks.AsNoTracking().Include(task => task.Category).ToListAsync();
     }
 
     // 2

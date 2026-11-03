@@ -16,6 +16,8 @@ public static class DependencyInjection
         services.AddScoped<IDatabaseSetupService, DatabaseSetupService>();
         services.AddSingleton<IUserSession, UserSession>();
         services.AddScoped<IProjectService, ProjectService>();
+        services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<IProjectMemberService, ProjectMemberService>();
         return services;
     }
 }

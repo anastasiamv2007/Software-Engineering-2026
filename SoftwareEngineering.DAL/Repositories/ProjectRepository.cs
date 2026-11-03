@@ -88,4 +88,11 @@ public class ProjectRepository : IProjectRepository
             await context.SaveChangesAsync();
         }
     }
+
+    public async Task AddMemberAsync(ProjectMember member)
+    {
+        await using var context = await this.contextFactory.CreateDbContextAsync();
+        await context.Set<ProjectMember>().AddAsync(member);
+        await context.SaveChangesAsync();
+    }
 }
