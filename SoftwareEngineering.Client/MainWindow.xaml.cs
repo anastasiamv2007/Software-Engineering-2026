@@ -55,6 +55,17 @@ namespace SoftwareEngineering.Client
             };
         }
 
+        private void TasksDataGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Подвійний клік по заголовку чи смузі прокрутки не має відкривати деталі вибраного раніше рядка
+            var row = ItemsControl.ContainerFromElement(TasksDataGrid, (DependencyObject)e.OriginalSource) as DataGridRow;
+            if (row?.Item is TaskModel)
+            {
+                // Та сама логіка, що й у кнопки "Деталі"
+                GoToDetails_Click(sender, new RoutedEventArgs());
+            }
+        }
+
         private Guid CurrentUserId => userSession.CurrentUserId ?? Guid.Empty;
 
         // "Іван Петренко" -> "ІП"; логування виходу вже є всередині App.SignOut / SignOutAndDisconnect
