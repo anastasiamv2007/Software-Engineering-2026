@@ -235,7 +235,7 @@
                     <TextBox x:Name="SearchBox" Height="34" VerticalContentAlignment="Center" Padding="8,0" TextChanged="SearchBox_TextChanged"/>
                 </DockPanel>
 
-                <!-- НОВА ПАНЕЛЬ ФІЛЬТРІВ ТА СОРТУВАННЯ -->
+                <!-- ПАНЕЛЬ ФІЛЬТРІВ ТА СОРТУВАННЯ -->
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,16">
 
                     <!-- Фільтр за статусом -->
@@ -243,9 +243,11 @@
                         <TextBlock Text="Статус:" Style="{StaticResource FieldLabel}"/>
                         <ComboBox x:Name="FilterStatusComboBox" Width="130" Height="32" VerticalContentAlignment="Center" SelectionChanged="OnFilterChanged">
                             <ComboBoxItem Content="Всі" IsSelected="True"/>
-                            <ComboBoxItem Content="Todo" Tag="Todo"/>
-                            <ComboBoxItem Content="InProgress" Tag="InProgress"/>
-                            <ComboBoxItem Content="Done" Tag="Done"/>
+                            <ComboBoxItem Content="До виконання" Tag="Todo"/>
+                            <ComboBoxItem Content="В роботі" Tag="InProgress"/>
+                            <ComboBoxItem Content="На перевірці" Tag="InReview"/>
+                            <ComboBoxItem Content="На доопрацюванні" Tag="NeedsRevision"/>
+                            <ComboBoxItem Content="Виконано" Tag="Done"/>
                         </ComboBox>
                     </StackPanel>
 
@@ -254,9 +256,17 @@
                         <TextBlock Text="Пріоритет:" Style="{StaticResource FieldLabel}"/>
                         <ComboBox x:Name="FilterPriorityComboBox" Width="130" Height="32" VerticalContentAlignment="Center" SelectionChanged="OnFilterChanged">
                             <ComboBoxItem Content="Всі" IsSelected="True"/>
-                            <ComboBoxItem Content="Low" Tag="Low"/>
-                            <ComboBoxItem Content="Medium" Tag="Medium"/>
-                            <ComboBoxItem Content="High" Tag="High"/>
+                            <ComboBoxItem Content="Високий" Tag="High"/>
+                            <ComboBoxItem Content="Середній" Tag="Medium"/>
+                            <ComboBoxItem Content="Низький" Tag="Low"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Фільтр за категорією (список заповнюється з БД) -->
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Категорія:" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="FilterCategoryComboBox" Width="150" Height="32" VerticalContentAlignment="Center" SelectionChanged="OnFilterChanged">
+                            <ComboBoxItem Content="Всі" IsSelected="True"/>
                         </ComboBox>
                     </StackPanel>
 
@@ -264,8 +274,8 @@
                     <StackPanel Margin="0,0,16,0">
                         <TextBlock Text="Сортувати за:" Style="{StaticResource FieldLabel}"/>
                         <ComboBox x:Name="SortComboBox" Width="180" Height="32" VerticalContentAlignment="Center" SelectionChanged="OnFilterChanged">
-                            <ComboBoxItem Content="Дедлайном (Найближчі)" Tag="ByDeadlineAsc" IsSelected="True"/>
-                            <ComboBoxItem Content="Пріоритетом (High->Low)" Tag="ByPriorityDesc"/>
+                            <ComboBoxItem Content="Дедлайном (найближчі)" Tag="ByDeadlineAsc" IsSelected="True"/>
+                            <ComboBoxItem Content="Пріоритетом (високий → низький)" Tag="ByPriorityDesc"/>
                             <ComboBoxItem Content="Назвою (А-Я)" Tag="ByTitleAsc"/>
                         </ComboBox>
                     </StackPanel>

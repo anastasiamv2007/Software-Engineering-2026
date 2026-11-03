@@ -3,6 +3,7 @@ using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
+using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Enums;
 using System.Windows;
 using System.Windows.Controls;
@@ -46,7 +47,12 @@ namespace SoftwareEngineering.Client
             DelUserIdTextBox.IsReadOnly = true;
 
             DeadlineDatePicker.SelectedDate = DateTime.Now.AddDays(1);
-            Loaded += async (_, _) => await LoadTasksAsync();
+            Loaded += async (_, _) =>
+            {
+                // Категорії потрібні для фільтра на сторінці завдань
+                await LoadCategoriesAsync();
+                await LoadTasksAsync();
+            };
         }
 
         private Guid CurrentUserId => userSession.CurrentUserId ?? Guid.Empty;
@@ -131,81 +137,87 @@ namespace SoftwareEngineering.Client
             }
         }
 
-        ///1
         private void ApplyFilter()
         {
             if (allTasks == null) return;
 
-            
             var criteria = new TaskFilterCriteria
             {
                 Status = GetSelectedEnum<TaskItemStatus>(FilterStatusComboBox),
                 Priority = GetSelectedEnum<TaskPriority>(FilterPriorityComboBox),
+                CategoryId = (FilterCategoryComboBox?.SelectedItem as ComboBoxItem)?.Tag as int?,
                 OnlyOverdue = FilterOverdueCheckBox.IsChecked ?? false,
-                SortBy = GetSelectedEnum<TaskSortOption>(SortComboBox) ?? TaskSortOption.ByDeadlineAsc
+                SortBy = GetSelectedEnum<TaskSortOption>(SortComboBox) ?? TaskSortOption.ByDeadlineAsc,
             };
 
-            
-            var filterResult = SoftwareEngineering.BLL.Services.TaskFilter.Apply(allTasks, criteria);
-
-            if (filterResult.IsSuccess)
+            var filterResult = TaskFilter.Apply(allTasks, criteria);
+            if (filterResult.IsFailure)
             {
-                var filteredList = filterResult.Value!;
-
-                
-                var query = SearchBox.Text?.Trim() ?? string.Empty;
-                if (!string.IsNullOrEmpty(query))
-                {
-                    filteredList = filteredList.Where(t => t.Title.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
-                }
-
-                
-                TasksDataGrid.ItemsSource = filteredList;
+                Log.Warning("Помилка фільтрації задач: {Error}", filterResult.Error!.Message);
+                return;
             }
-            else
+
+            IReadOnlyList<TaskModel> filteredList = filterResult.Value!;
+
+            // Пошук за назвою працює поверх фільтрів
+            var query = SearchBox.Text?.Trim() ?? string.Empty;
+            if (!string.IsNullOrEmpty(query))
             {
-                Log.Warning("Помилка фільтрації задач: {Error}", filterResult.ErrorMessage);
+                filteredList = filteredList.Where(t => t.Title.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
             }
+
+            TasksDataGrid.ItemsSource = filteredList;
         }
 
-        
-
-        
-        private T? GetSelectedEnum<T>(ComboBox comboBox) where T : struct
+        private static T? GetSelectedEnum<T>(ComboBox comboBox) where T : struct
         {
-            if (comboBox?.SelectedItem is ComboBoxItem selectedItem && selectedItem.Tag != null)
+            if (comboBox?.SelectedItem is ComboBoxItem { Tag: not null } selectedItem &&
+                Enum.TryParse(selectedItem.Tag.ToString(), out T result))
             {
-                if (Enum.TryParse(selectedItem.Tag.ToString(), out T result))
-                {
-                    return result;
-                }
+                return result;
             }
+
             return null;
         }
 
-        
+        /// <summary>
+        /// Оновлює список категорій у фільтрі, зберігаючи поточний вибір.
+        /// </summary>
+        private void RefreshCategoryFilter(IReadOnlyList<CategoryModel> categories)
+        {
+            var selectedId = (FilterCategoryComboBox.SelectedItem as ComboBoxItem)?.Tag as int?;
+
+            FilterCategoryComboBox.Items.Clear();
+            FilterCategoryComboBox.Items.Add(new ComboBoxItem { Content = "Всі" });
+            foreach (var category in categories)
+            {
+                FilterCategoryComboBox.Items.Add(new ComboBoxItem { Content = category.Name, Tag = category.Id });
+            }
+
+            FilterCategoryComboBox.SelectedItem = FilterCategoryComboBox.Items
+                .OfType<ComboBoxItem>()
+                .FirstOrDefault(item => item.Tag as int? == selectedId) ?? FilterCategoryComboBox.Items[0];
+        }
+
         private void OnFilterChanged(object sender, RoutedEventArgs e)
         {
-            
             if (IsLoaded)
             {
                 ApplyFilter();
             }
         }
 
-        
         private void OnClearFiltersClicked(object sender, RoutedEventArgs e)
         {
-            
-            if (FilterStatusComboBox != null) FilterStatusComboBox.SelectedIndex = 0;
-            if (FilterPriorityComboBox != null) FilterPriorityComboBox.SelectedIndex = 0;
-            if (SortComboBox != null) SortComboBox.SelectedIndex = 0;
-            if (FilterOverdueCheckBox != null) FilterOverdueCheckBox.IsChecked = false;
-            if (SearchBox != null) SearchBox.Text = string.Empty;
+            FilterStatusComboBox.SelectedIndex = 0;
+            FilterPriorityComboBox.SelectedIndex = 0;
+            FilterCategoryComboBox.SelectedIndex = 0;
+            SortComboBox.SelectedIndex = 0;
+            FilterOverdueCheckBox.IsChecked = false;
+            SearchBox.Text = string.Empty;
 
             ApplyFilter();
         }
-        ///1
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -493,6 +505,7 @@ namespace SoftwareEngineering.Client
             }
 
             CatList.ItemsSource = result.Value;
+            RefreshCategoryFilter(result.Value!);
         }
 
         private void BuildCategoryPalette()
