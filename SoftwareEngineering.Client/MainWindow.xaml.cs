@@ -131,13 +131,81 @@ namespace SoftwareEngineering.Client
             }
         }
 
+        ///1
         private void ApplyFilter()
         {
-            var query = SearchBox.Text?.Trim() ?? string.Empty;
-            TasksDataGrid.ItemsSource = string.IsNullOrEmpty(query)
-              ? allTasks
-              : allTasks.Where(t => t.Title.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (allTasks == null) return;
+
+            
+            var criteria = new TaskFilterCriteria
+            {
+                Status = GetSelectedEnum<TaskItemStatus>(FilterStatusComboBox),
+                Priority = GetSelectedEnum<TaskPriority>(FilterPriorityComboBox),
+                OnlyOverdue = FilterOverdueCheckBox.IsChecked ?? false,
+                SortBy = GetSelectedEnum<TaskSortOption>(SortComboBox) ?? TaskSortOption.ByDeadlineAsc
+            };
+
+            
+            var filterResult = SoftwareEngineering.BLL.Services.TaskFilter.Apply(allTasks, criteria);
+
+            if (filterResult.IsSuccess)
+            {
+                var filteredList = filterResult.Value!;
+
+                
+                var query = SearchBox.Text?.Trim() ?? string.Empty;
+                if (!string.IsNullOrEmpty(query))
+                {
+                    filteredList = filteredList.Where(t => t.Title.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+
+                
+                TasksDataGrid.ItemsSource = filteredList;
+            }
+            else
+            {
+                Log.Warning("Помилка фільтрації задач: {Error}", filterResult.ErrorMessage);
+            }
         }
+
+        
+
+        
+        private T? GetSelectedEnum<T>(ComboBox comboBox) where T : struct
+        {
+            if (comboBox?.SelectedItem is ComboBoxItem selectedItem && selectedItem.Tag != null)
+            {
+                if (Enum.TryParse(selectedItem.Tag.ToString(), out T result))
+                {
+                    return result;
+                }
+            }
+            return null;
+        }
+
+        
+        private void OnFilterChanged(object sender, RoutedEventArgs e)
+        {
+            
+            if (IsLoaded)
+            {
+                ApplyFilter();
+            }
+        }
+
+        
+        private void OnClearFiltersClicked(object sender, RoutedEventArgs e)
+        {
+            
+            if (FilterStatusComboBox != null) FilterStatusComboBox.SelectedIndex = 0;
+            if (FilterPriorityComboBox != null) FilterPriorityComboBox.SelectedIndex = 0;
+            if (SortComboBox != null) SortComboBox.SelectedIndex = 0;
+            if (FilterOverdueCheckBox != null) FilterOverdueCheckBox.IsChecked = false;
+            if (SearchBox != null) SearchBox.Text = string.Empty;
+
+            ApplyFilter();
+        }
+        ///1
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {

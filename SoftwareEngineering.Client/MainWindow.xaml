@@ -216,6 +216,8 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <!-- Новий рядок для фільтрів -->
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -233,7 +235,51 @@
                     <TextBox x:Name="SearchBox" Height="34" VerticalContentAlignment="Center" Padding="8,0" TextChanged="SearchBox_TextChanged"/>
                 </DockPanel>
 
-                <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
+                <!-- НОВА ПАНЕЛЬ ФІЛЬТРІВ ТА СОРТУВАННЯ -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,16">
+
+                    <!-- Фільтр за статусом -->
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Статус:" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="FilterStatusComboBox" Width="130" Height="32" VerticalContentAlignment="Center" SelectionChanged="OnFilterChanged">
+                            <ComboBoxItem Content="Всі" IsSelected="True"/>
+                            <ComboBoxItem Content="Todo" Tag="Todo"/>
+                            <ComboBoxItem Content="InProgress" Tag="InProgress"/>
+                            <ComboBoxItem Content="Done" Tag="Done"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Фільтр за пріоритетом -->
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Пріоритет:" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="FilterPriorityComboBox" Width="130" Height="32" VerticalContentAlignment="Center" SelectionChanged="OnFilterChanged">
+                            <ComboBoxItem Content="Всі" IsSelected="True"/>
+                            <ComboBoxItem Content="Low" Tag="Low"/>
+                            <ComboBoxItem Content="Medium" Tag="Medium"/>
+                            <ComboBoxItem Content="High" Tag="High"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Сортування -->
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Сортувати за:" Style="{StaticResource FieldLabel}"/>
+                        <ComboBox x:Name="SortComboBox" Width="180" Height="32" VerticalContentAlignment="Center" SelectionChanged="OnFilterChanged">
+                            <ComboBoxItem Content="Дедлайном (Найближчі)" Tag="ByDeadlineAsc" IsSelected="True"/>
+                            <ComboBoxItem Content="Пріоритетом (High->Low)" Tag="ByPriorityDesc"/>
+                            <ComboBoxItem Content="Назвою (А-Я)" Tag="ByTitleAsc"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Тільки прострочені -->
+                    <CheckBox x:Name="FilterOverdueCheckBox" Content="Тільки прострочені" 
+                              Foreground="#334155" FontWeight="SemiBold" VerticalAlignment="Bottom" Margin="0,0,16,8" 
+                              Checked="OnFilterChanged" Unchecked="OnFilterChanged"/>
+
+                    <!-- Кнопка скидання -->
+                    <Button Content="Скинути" Style="{StaticResource SecondaryButton}" Height="32" Padding="16,0" VerticalAlignment="Bottom" Click="OnClearFiltersClicked"/>
+                </StackPanel>
+
+                <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
                     <DataGrid x:Name="TasksDataGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="0"
                               Background="White" RowHeight="48" CanUserAddRows="False">
