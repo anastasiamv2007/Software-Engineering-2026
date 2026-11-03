@@ -55,8 +55,11 @@ public partial class LoginWindow : Window {
             // Зберігаємо залогіненого користувача в спільну сесію
             _userSession.SetUser(user);
 
+            var app = (App)Application.Current;
+            await app.UpdateRememberedSessionAsync(user.Id, RememberMeCheckBox.IsChecked == true);
+
             // Відкриваємо головне робоче вікно
-            var mainWindow = ((App)Application.Current).GetService<MainWindow>();
+            var mainWindow = app.GetService<MainWindow>();
             mainWindow.Show();
             this.Close();
         }
