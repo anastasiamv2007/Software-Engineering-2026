@@ -1,4 +1,4 @@
-﻿using Moq;
+using Moq;
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Services;
@@ -560,9 +560,10 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_UserIsNotAssignee_ThrowsValidationException()
+    public async Task UpdateProgressAsync_UserIsNotProjectMember_ThrowsValidationException()
     {
         // Arrange
+        this.SetProjectRole(null);
         var entity = this.CreateAssignedTask(out _);
         var service = this.CreateService();
 
@@ -572,16 +573,20 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_TaskWithoutAssignee_ThrowsValidationException()
+    public async Task UpdateProgressAsync_ProjectOwnerAndTaskWithoutAssignee_UpdatesStatus()
     {
         // Arrange
+        this.SetProjectRole(ProjectRole.Owner);
         var entity = this.CreateAssignedTask(out _);
         entity.AssigneeId = null;
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid()));
+        // Act
+        var result = await service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(TaskItemStatus.Done, result.Status);
+        this.repositoryMock.Verify(repository => repository.UpdateAsync(entity), Times.Once);
     }
 
     [Fact]
@@ -597,9 +602,10 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_UserIsNotAssignee_DoesNotUpdateTask()
+    public async Task UpdateProgressAsync_UserIsNotProjectMember_DoesNotUpdateTask()
     {
         // Arrange
+        this.SetProjectRole(null);
         var entity = this.CreateAssignedTask(out _);
         var service = this.CreateService();
 

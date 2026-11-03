@@ -186,9 +186,12 @@ public class TaskService : BaseService, ITaskService
 
             var entity = await this.taskRepository.GetByIdAsync(taskId);
             this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+            // Виконавця (assignee_id) в UI поки ніде не призначають, тому статус, як і інші поля,
+            // можуть змінювати учасники проєкту; призначений виконавець — також
+            var role = await this.projectRepository.GetMemberRoleAsync(entity!.ProjectId, currentUserId);
             this.ValidateCondition(
-                entity!.AssigneeId == currentUserId,
-                "Лише співвиконавець завдання може оновлювати прогрес.");
+                entity.AssigneeId == currentUserId || entity.OwnerId == currentUserId || role is ProjectRole.Owner or ProjectRole.CoExecutor,
+                "Оновлювати прогрес можуть лише учасники проєкту.");
             this.ValidateCondition(entity.Status != newStatus, "Завдання вже має такий статус.");
 
             var oldStatus = entity.Status;
