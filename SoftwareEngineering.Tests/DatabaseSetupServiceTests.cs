@@ -133,6 +133,61 @@ public sealed class DatabaseSetupServiceTests : IDisposable
         Assert.Equal(Password, builder.Password);
     }
 
+    [Fact]
+    public void RememberSession_IsBoundToItsConnectionAndEncrypted()
+    {
+        // Arrange
+        var service = new DatabaseSetupService(this.storageDirectory);
+        var first = CreateConnection("Перша");
+        var second = CreateConnection("Друга");
+        service.SaveConnection(first);
+        service.SaveConnection(second);
+        var userId = Guid.NewGuid();
+
+        // Act
+        service.RememberSession(first.Id, new RememberedSessionModel { UserId = userId, PasswordStamp = "stamp" });
+
+        // Assert
+        Assert.Equal(userId, service.GetRememberedSession(first.Id)!.UserId);
+        Assert.Null(service.GetRememberedSession(second.Id));
+        Assert.True(service.GetSavedConnections().Single(c => c.Id == first.Id).HasRememberedSession);
+        Assert.DoesNotContain(userId.ToString(), File.ReadAllText(Path.Combine(this.storageDirectory, "connections.json")));
+    }
+
+    [Fact]
+    public void ForgetSession_RemovesRememberedSession()
+    {
+        // Arrange
+        var service = new DatabaseSetupService(this.storageDirectory);
+        var connection = CreateConnection("Локальна");
+        service.SaveConnection(connection);
+        service.RememberSession(connection.Id, new RememberedSessionModel { UserId = Guid.NewGuid(), PasswordStamp = "stamp" });
+
+        // Act
+        service.ForgetSession(connection.Id);
+
+        // Assert
+        Assert.Null(service.GetRememberedSession(connection.Id));
+        Assert.False(Assert.Single(service.GetSavedConnections()).HasRememberedSession);
+    }
+
+    [Fact]
+    public void SaveConnection_EditingConnection_KeepsRememberedSession()
+    {
+        // Arrange
+        var service = new DatabaseSetupService(this.storageDirectory);
+        var connection = CreateConnection("Стара назва");
+        service.SaveConnection(connection);
+        service.RememberSession(connection.Id, new RememberedSessionModel { UserId = Guid.NewGuid(), PasswordStamp = "stamp" });
+
+        // Act
+        connection.Name = "Нова назва";
+        service.SaveConnection(connection);
+
+        // Assert
+        Assert.NotNull(service.GetRememberedSession(connection.Id));
+    }
+
     private static DatabaseConnectionModel CreateConnection(string name)
     {
         return new DatabaseConnectionModel

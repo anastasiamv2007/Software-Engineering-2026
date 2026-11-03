@@ -5,6 +5,8 @@
         WindowStartupLocation="CenterScreen" Background="#F8FAFC">
 
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
         <Style x:Key="PrimaryButton" TargetType="Button">
             <Setter Property="Background" Value="#2563EB"/>
             <Setter Property="Foreground" Value="White"/>
@@ -55,6 +57,8 @@
                                     <TextBlock Text="{Binding Summary}" FontSize="12" Foreground="#64748B" Margin="0,2,0,0"/>
                                     <TextBlock FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0"
                                                Text="{Binding LastUsedAt, StringFormat='Останнє підключення: {0:dd.MM.yyyy HH:mm}', TargetNullValue='Ще не підключались'}"/>
+                                    <TextBlock Text="✓ Вхід збережено — логін не потрібен" FontSize="11" FontWeight="SemiBold" Foreground="#16A34A" Margin="0,2,0,0"
+                                               Visibility="{Binding HasRememberedSession, Converter={StaticResource BoolToVisibility}}"/>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

@@ -77,7 +77,11 @@ namespace SoftwareEngineering.Client
 
         private void SignOut_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show("Ви дійсно хочете вийти з облікового запису?", "Вихід", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            var result = MessageBox.Show(
+                "Ви дійсно хочете вийти з облікового запису?\nЗбережений вхід на цьому пристрої буде скасовано.",
+                "Вихід",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
             {
                 ((App)Application.Current).SignOut();
@@ -86,7 +90,11 @@ namespace SoftwareEngineering.Client
 
         private void SignOutAndDisconnect_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show("Вийти з облікового запису та обрати іншу базу даних?", "Змінити базу", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            var result = MessageBox.Show(
+                "Відключитися від цієї бази та обрати іншу?\nЯкщо вхід збережено, для цієї бази логін наступного разу не знадобиться.",
+                "Змінити базу",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
             {
                 ((App)Application.Current).SignOutAndDisconnect();
