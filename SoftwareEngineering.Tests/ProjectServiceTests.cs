@@ -109,6 +109,7 @@ public class ProjectServiceTests
     {
         // Arrange
         var projectId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
         var validModel = new UpdateProjectModel
         {
             Id = projectId,
@@ -119,7 +120,7 @@ public class ProjectServiceTests
         {
             Id = projectId,
             Name = "Стара назва",
-            OwnerId = Guid.NewGuid()
+            OwnerId = ownerId
         };
 
         this.repositoryMock
@@ -129,7 +130,7 @@ public class ProjectServiceTests
         var service = this.CreateService();
 
         // Act
-        await service.UpdateProjectAsync(validModel);
+        await service.UpdateProjectAsync(validModel, ownerId);
 
         // Assert
         this.repositoryMock.Verify(repo => repo.UpdateAsync(It.Is<Project>(p => p.Id == projectId && p.Name == "Оновлена назва")), Times.Once);
@@ -143,7 +144,7 @@ public class ProjectServiceTests
         var service = this.CreateService();
 
         // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateProjectAsync(invalidModel));
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateProjectAsync(invalidModel, Guid.NewGuid()));
         this.repositoryMock.Verify(repo => repo.UpdateAsync(It.IsAny<Project>()), Times.Never);
     }
 
@@ -158,7 +159,7 @@ public class ProjectServiceTests
         var service = this.CreateService();
 
         // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateProjectAsync(model));
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateProjectAsync(model, Guid.NewGuid()));
     }
 
     // ==========================================
@@ -170,7 +171,8 @@ public class ProjectServiceTests
     {
         // Arrange
         var projectId = Guid.NewGuid();
-        var existingEntity = new Project { Id = projectId, Name = "Проєкт для видалення" };
+        var ownerId = Guid.NewGuid();
+        var existingEntity = new Project { Id = projectId, Name = "Проєкт для видалення", OwnerId = ownerId };
 
         this.repositoryMock
             .Setup(repo => repo.GetByIdAsync(projectId))
@@ -179,7 +181,7 @@ public class ProjectServiceTests
         var service = this.CreateService();
 
         // Act
-        await service.DeleteProjectAsync(projectId);
+        await service.DeleteProjectAsync(projectId, ownerId);
 
         // Assert
         this.repositoryMock.Verify(repo => repo.DeleteAsync(projectId), Times.Once);
@@ -196,7 +198,38 @@ public class ProjectServiceTests
         var service = this.CreateService();
 
         // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.DeleteProjectAsync(projectId));
+        await Assert.ThrowsAsync<ValidationException>(() => service.DeleteProjectAsync(projectId, Guid.NewGuid()));
+        this.repositoryMock.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    // ==========================================
+    // 5. ПРАВА: ЛИШЕ ВЛАСНИК
+    // ==========================================
+
+    [Fact]
+    public async Task UpdateProjectAsync_UserIsNotOwner_ThrowsValidationException()
+    {
+        // Arrange
+        var project = new Project { Id = Guid.NewGuid(), Name = "Чужий проєкт", OwnerId = Guid.NewGuid() };
+        this.repositoryMock.Setup(repo => repo.GetByIdAsync(project.Id)).ReturnsAsync(project);
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(
+            () => service.UpdateProjectAsync(new UpdateProjectModel { Id = project.Id, Name = "Нова назва" }, Guid.NewGuid()));
+        this.repositoryMock.Verify(repo => repo.UpdateAsync(It.IsAny<Project>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteProjectAsync_UserIsNotOwner_ThrowsValidationException()
+    {
+        // Arrange
+        var project = new Project { Id = Guid.NewGuid(), Name = "Чужий проєкт", OwnerId = Guid.NewGuid() };
+        this.repositoryMock.Setup(repo => repo.GetByIdAsync(project.Id)).ReturnsAsync(project);
+        var service = this.CreateService();
+
+        // Act and Assert
+        await Assert.ThrowsAsync<ValidationException>(() => service.DeleteProjectAsync(project.Id, Guid.NewGuid()));
         this.repositoryMock.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
     }
 
