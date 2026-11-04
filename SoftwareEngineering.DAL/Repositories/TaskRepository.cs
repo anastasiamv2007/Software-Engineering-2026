@@ -28,7 +28,33 @@ public class TaskRepository : ITaskRepository
     public async Task<IEnumerable<TaskItem>> GetAsync()
     {
         await using var context = await this.contextFactory.CreateDbContextAsync();
-        return await context.Tasks.AsNoTracking().ToListAsync();
+        return await context.Tasks.AsNoTracking().Include(task => task.Category).ToListAsync();
+    }
+
+    public async Task<IReadOnlyList<TaskItem>> GetByUserAsync(Guid userId)
+    {
+        await using var context = await this.contextFactory.CreateDbContextAsync();
+        return await context.Tasks
+            .AsNoTracking()
+            .Include(task => task.Category)
+            .Where(task => task.Project.OwnerId == userId || task.Project.Members.Any(member => member.UserId == userId))
+            .ToListAsync();
+    }
+
+    public async Task<TaskItem?> GetDetailsAsync(Guid id)
+    {
+        await using var context = await this.contextFactory.CreateDbContextAsync();
+        return await context.Tasks
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(task => task.Project).ThenInclude(project => project.Owner)
+            .Include(task => task.Project).ThenInclude(project => project.Members).ThenInclude(member => member.User)
+            .Include(task => task.Owner)
+            .Include(task => task.Assignee)
+            .Include(task => task.Category)
+            .Include(task => task.Subtasks)
+            .Include(task => task.Comments)
+            .FirstOrDefaultAsync(task => task.Id == id);
     }
 
     // 2

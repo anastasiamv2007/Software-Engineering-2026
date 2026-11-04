@@ -10,6 +10,16 @@ public interface ITaskRepository
 
     Task<IEnumerable<TaskItem>> GetAsync();
 
+    /// <summary>
+    /// Завдання проєктів, де користувач є власником або учасником.
+    /// </summary>
+    Task<IReadOnlyList<TaskItem>> GetByUserAsync(Guid userId);
+
+    /// <summary>
+    /// Завдання разом із проєктом, учасниками, власником, виконавцем, категорією, підзадачами та коментарями.
+    /// </summary>
+    Task<TaskItem?> GetDetailsAsync(Guid id);
+
     // 2
     Task<TaskItem?> GetByIdAsync(Guid id);
 

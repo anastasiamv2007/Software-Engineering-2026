@@ -68,7 +68,7 @@ public class ProjectService : BaseService, IProjectService
         });
     }
 
-    public async Task UpdateProjectAsync(UpdateProjectModel model)
+    public async Task UpdateProjectAsync(UpdateProjectModel model, Guid currentUserId)
     {
         await this.ExecuteWithLoggingAsync("Оновлення проєкту", async () =>
         {
@@ -78,8 +78,9 @@ public class ProjectService : BaseService, IProjectService
 
             var project = await this.projectRepository.GetByIdAsync(model.Id);
             this.ValidateCondition(project != null, "Проєкт не знайдено.");
+            this.ValidateCondition(project!.OwnerId == currentUserId, "Редагувати проєкт може лише його власник.");
 
-            project!.Name = trimmedName;
+            project.Name = trimmedName;
             await this.projectRepository.UpdateAsync(project);
 
             this.Logger.Information("Оновлено проєкт {ProjectId}: нова назва {ProjectName}", model.Id, trimmedName);
@@ -87,12 +88,15 @@ public class ProjectService : BaseService, IProjectService
         });
     }
 
-    public async Task DeleteProjectAsync(Guid id)
+    public async Task DeleteProjectAsync(Guid id, Guid currentUserId)
     {
         await this.ExecuteWithLoggingAsync("Видалення проєкту", async () =>
         {
             var project = await this.projectRepository.GetByIdAsync(id);
             this.ValidateCondition(project != null, "Проєкт не знайдено.");
+
+            // Видалення каскадно прибирає всі завдання проєкту, тому дозволено лише власнику
+            this.ValidateCondition(project!.OwnerId == currentUserId, "Видалити проєкт може лише його власник.");
 
             await this.projectRepository.DeleteAsync(id);
             this.Logger.Information("Видалено проєкт {ProjectId}", id);

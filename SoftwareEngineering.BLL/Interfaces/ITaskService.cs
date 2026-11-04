@@ -6,6 +6,17 @@ namespace SoftwareEngineering.BLL.Interfaces;
 public interface ITaskService : IService
 {
     Task<IReadOnlyList<TaskModel>> GetAllAsync();
+
+    /// <summary>
+    /// Завдання лише тих проєктів, де користувач є власником або співвиконавцем.
+    /// </summary>
+    Task<IReadOnlyList<TaskModel>> GetUserTasksAsync(Guid userId);
+
+    /// <summary>
+    /// Повна інформація про завдання; доступна лише учасникам його проєкту.
+    /// </summary>
+    Task<TaskDetailsModel> GetDetailsAsync(Guid taskId, Guid currentUserId);
+
     Task<TaskModel> CreateAsync(TaskModel model);
 
 

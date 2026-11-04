@@ -16,11 +16,13 @@ public class TaskService : BaseService, ITaskService
 
     private readonly ITaskRepository taskRepository;
     private readonly IProjectRepository projectRepository;
+    private readonly ICategoryRepository categoryRepository;
 
-    public TaskService(ITaskRepository taskRepository, IProjectRepository projectRepository)
+    public TaskService(ITaskRepository taskRepository, IProjectRepository projectRepository, ICategoryRepository categoryRepository)
     {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
+        this.categoryRepository = categoryRepository;
     }
 
     public async Task<IReadOnlyList<TaskModel>> GetAllAsync()
@@ -29,6 +31,72 @@ public class TaskService : BaseService, ITaskService
         {
             var entities = await this.taskRepository.GetAsync(); // Виправлено назву методу репозиторію
             return entities.Select(ToModel).ToList().AsReadOnly();
+        });
+    }
+
+    public async Task<IReadOnlyList<TaskModel>> GetUserTasksAsync(Guid userId)
+    {
+        return await this.ExecuteWithLoggingAsync("Отримання завдань користувача", async () =>
+        {
+            this.ValidateCondition(userId != Guid.Empty, "Ідентифікатор користувача не вказано.");
+
+            var entities = await this.taskRepository.GetByUserAsync(userId);
+            return entities.Select(ToModel).ToList().AsReadOnly();
+        });
+    }
+
+    public async Task<TaskDetailsModel> GetDetailsAsync(Guid taskId, Guid currentUserId)
+    {
+        return await this.ExecuteWithLoggingAsync("Перегляд повної інформації про завдання", async () =>
+        {
+            this.ValidateCondition(taskId != Guid.Empty, "Ідентифікатор завдання не може бути порожнім.");
+            this.ValidateCondition(currentUserId != Guid.Empty, "Ідентифікатор користувача не вказано.");
+
+            var entity = await this.taskRepository.GetDetailsAsync(taskId);
+            this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+
+            var project = entity!.Project;
+            var role = project.OwnerId == currentUserId
+                ? ProjectRole.Owner
+                : project.Members.FirstOrDefault(member => member.UserId == currentUserId)?.Role;
+            this.ValidateCondition(
+                role != null || entity.OwnerId == currentUserId || entity.AssigneeId == currentUserId,
+                "Переглядати завдання можуть лише учасники його проєкту.");
+
+            var members = project.Members
+                .OrderBy(member => member.Role)
+                .ThenBy(member => member.User.FullName)
+                .Select(member => new TaskMemberModel
+                {
+                    FullName = member.User.FullName,
+                    Email = member.User.Email,
+                    Role = member.Role,
+                })
+                .ToList();
+
+            var creator = project.Members.FirstOrDefault(member => member.UserId == entity.CreatorId)?.User;
+
+            return new TaskDetailsModel
+            {
+                Task = ToModel(entity),
+                CreatedAt = entity.CreatedAt,
+                IsOverdue = entity.Status != TaskItemStatus.Done && entity.Deadline.HasValue && entity.Deadline.Value.ToUniversalTime() < DateTime.UtcNow,
+                ProjectName = project.Name,
+                ProjectOwnerName = project.Owner.FullName,
+                OwnerName = entity.Owner.FullName,
+                OwnerEmail = entity.Owner.Email,
+                CreatorName = creator?.FullName,
+                AssigneeName = entity.Assignee?.FullName,
+                CategoryName = entity.Category?.Name,
+                CategoryColorHex = entity.Category?.ColorHex,
+                SubtasksTotal = entity.Subtasks.Count,
+                SubtasksCompleted = entity.Subtasks.Count(subtask => subtask.IsCompleted),
+                CommentsCount = entity.Comments.Count,
+                Members = members,
+                CurrentUserRole = role,
+                CanEdit = role is ProjectRole.Owner or ProjectRole.CoExecutor || entity.OwnerId == currentUserId,
+                CanDeleteOrChangeDeadline = CanManage(entity, currentUserId, role),
+            };
         });
     }
 
@@ -42,6 +110,7 @@ public class TaskService : BaseService, ITaskService
             this.ValidateCondition(
                 role is ProjectRole.Owner or ProjectRole.CoExecutor,
                 "Створювати завдання можуть лише власник проєкту та співвиконавці.");
+            await this.ValidateCategoryAsync(model.CategoryId);
 
             var entity = await this.BuildEntityAsync(model);
             await this.taskRepository.AddAsync(entity);
@@ -87,6 +156,11 @@ public class TaskService : BaseService, ITaskService
                 this.ValidateCondition(
                     CanManage(entity, currentUserId, role),
                     "Змінювати дедлайн чужого завдання може лише власник проєкту.");
+            }
+
+            if (model.CategoryId != entity.CategoryId)
+            {
+                await this.ValidateCategoryAsync(model.CategoryId);
             }
 
             entity.Title = model.Title.Trim();
@@ -186,9 +260,12 @@ public class TaskService : BaseService, ITaskService
 
             var entity = await this.taskRepository.GetByIdAsync(taskId);
             this.ValidateCondition(entity != null, "Завдання з таким ідентифікатором не знайдено.");
+            // Виконавця (assignee_id) в UI поки ніде не призначають, тому статус, як і інші поля,
+            // можуть змінювати учасники проєкту; призначений виконавець — також
+            var role = await this.projectRepository.GetMemberRoleAsync(entity!.ProjectId, currentUserId);
             this.ValidateCondition(
-                entity!.AssigneeId == currentUserId,
-                "Лише співвиконавець завдання може оновлювати прогрес.");
+                entity.AssigneeId == currentUserId || entity.OwnerId == currentUserId || role is ProjectRole.Owner or ProjectRole.CoExecutor,
+                "Оновлювати прогрес можуть лише учасники проєкту.");
             this.ValidateCondition(entity.Status != newStatus, "Завдання вже має такий статус.");
 
             var oldStatus = entity.Status;
@@ -238,9 +315,23 @@ public class TaskService : BaseService, ITaskService
             Deadline = entity.Deadline,
             Priority = entity.Priority,
             CategoryId = entity.CategoryId,
+            CategoryName = entity.Category?.Name,
+            CategoryColorHex = entity.Category?.ColorHex,
             Status = entity.Status,
             OwnerId = entity.OwnerId,
         };
+    }
+
+    /// <summary>
+    /// Категорію могли видалити, поки форма була відкрита, — перевіряємо до запису в БД.
+    /// </summary>
+    private async Task ValidateCategoryAsync(int? categoryId)
+    {
+        if (categoryId.HasValue)
+        {
+            var category = await this.categoryRepository.GetByIdAsync(categoryId.Value);
+            this.ValidateCondition(category != null, "Обрану категорію не знайдено. Оновіть список категорій.");
+        }
     }
 
     private void ValidateNewTask(TaskModel model)
