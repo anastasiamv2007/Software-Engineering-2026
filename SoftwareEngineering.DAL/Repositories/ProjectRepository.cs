@@ -95,4 +95,16 @@ public class ProjectRepository : IProjectRepository
         await context.Set<ProjectMember>().AddAsync(member);
         await context.SaveChangesAsync();
     }
+
+    public async Task<IReadOnlyList<User>> GetProjectUsersAsync(Guid projectId)
+    {
+        await using var context = await this.contextFactory.CreateDbContextAsync();
+        return await context.Users
+            .AsNoTracking()
+            .Where(user =>
+                context.Projects.Any(project => project.Id == projectId && project.OwnerId == user.Id) ||
+                context.ProjectMembers.Any(member => member.ProjectId == projectId && member.UserId == user.Id))
+            .OrderBy(user => user.FullName)
+            .ToListAsync();
+    }
 }

@@ -26,4 +26,6 @@ public class TaskModel : BaseModel
     public TaskItemStatus Status { get; set; } = TaskItemStatus.Todo;
 
     public Guid OwnerId { get; set; }
+
+    public Guid? AssigneeId { get; set; }
 }
