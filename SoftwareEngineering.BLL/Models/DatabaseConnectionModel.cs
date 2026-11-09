@@ -29,6 +29,11 @@ public class DatabaseConnectionModel
     /// </summary>
     public bool IsPasswordAvailable { get; set; } = true;
 
+    /// <summary>
+    /// Для цієї бази на ПК запам'ятовано вхід — підключення відкриє програму без логіну.
+    /// </summary>
+    public bool HasRememberedSession { get; set; }
+
     public string DisplayName => string.IsNullOrWhiteSpace(this.Name) ? $"{this.Database} @ {this.Host}" : this.Name;
 
     public string Summary => $"{this.Username}@{this.Host}:{this.Port}/{this.Database}";

@@ -155,8 +155,15 @@ public class DatabaseSetupService : IDatabaseSetupService
         }
 
         var stored = this.ReadStored();
+        var previous = stored.Find(item => item.Id == connection.Id);
+        var updated = ToStored(connection);
+
+        // Редагування хоста/логіна БД не скидає збережений вхід; якщо база вже інша,
+        // користувача там не знайдеться і відкриється звичайне вікно входу
+        updated.ProtectedSession = previous?.ProtectedSession ?? string.Empty;
+
         stored.RemoveAll(item => item.Id == connection.Id);
-        stored.Add(ToStored(connection));
+        stored.Add(updated);
         this.WriteStored(stored);
 
         Logger.Information(
@@ -189,6 +196,62 @@ public class DatabaseSetupService : IDatabaseSetupService
 
         connection.LastUsedAt = DateTime.UtcNow;
         this.WriteStored(stored);
+    }
+
+    public RememberedSessionModel? GetRememberedSession(Guid connectionId)
+    {
+        var connection = this.ReadStored().Find(item => item.Id == connectionId);
+        if (connection == null || string.IsNullOrEmpty(connection.ProtectedSession))
+        {
+            return null;
+        }
+
+        string? json = SecretProtector.TryUnprotect(connection.ProtectedSession, SecretProtector.SessionPurpose);
+        if (json == null)
+        {
+            Logger.Warning("Не вдалося розшифрувати збережений вхід для підключення {ConnectionName}", connection.Name);
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<RememberedSessionModel>(json);
+        }
+        catch (JsonException ex)
+        {
+            Logger.Warning(ex, "Збережений вхід для підключення {ConnectionName} пошкоджено", connection.Name);
+            return null;
+        }
+    }
+
+    public void RememberSession(Guid connectionId, RememberedSessionModel session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        var stored = this.ReadStored();
+        var connection = stored.Find(item => item.Id == connectionId);
+        if (connection == null)
+        {
+            return;
+        }
+
+        connection.ProtectedSession = SecretProtector.Protect(JsonSerializer.Serialize(session), SecretProtector.SessionPurpose);
+        this.WriteStored(stored);
+        Logger.Information("Запам'ятовано вхід користувача {UserId} для підключення {ConnectionName}", session.UserId, connection.Name);
+    }
+
+    public void ForgetSession(Guid connectionId)
+    {
+        var stored = this.ReadStored();
+        var connection = stored.Find(item => item.Id == connectionId);
+        if (connection == null || string.IsNullOrEmpty(connection.ProtectedSession))
+        {
+            return;
+        }
+
+        connection.ProtectedSession = string.Empty;
+        this.WriteStored(stored);
+        Logger.Information("Забуто збережений вхід для підключення {ConnectionName}", connection.Name);
     }
 
     /// <summary>
@@ -227,6 +290,7 @@ public class DatabaseSetupService : IDatabaseSetupService
             Password = password ?? string.Empty,
             IsPasswordAvailable = password != null || string.IsNullOrEmpty(stored.ProtectedPassword),
             LastUsedAt = stored.LastUsedAt,
+            HasRememberedSession = !string.IsNullOrEmpty(stored.ProtectedSession),
         };
     }
 
@@ -324,5 +388,8 @@ public class DatabaseSetupService : IDatabaseSetupService
         public string ProtectedPassword { get; set; } = string.Empty;
 
         public DateTime? LastUsedAt { get; set; }
+
+        // RememberedSessionModel у JSON, зашифрований DPAPI
+        public string ProtectedSession { get; set; } = string.Empty;
     }
 }
