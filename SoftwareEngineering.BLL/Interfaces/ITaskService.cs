@@ -1,4 +1,5 @@
 ﻿using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.DAL.Enums;
 
 namespace SoftwareEngineering.BLL.Interfaces;
@@ -38,5 +39,9 @@ public interface ITaskService : IService
 
     // 6
     Task<TaskModel> UpdateDeadlineAsync(Guid taskId, DateTime? newDeadline, Guid currentUserId);
+
+    Task<Result<TaskModel>> AssignAsync(Guid taskId, Guid? assigneeId, Guid currentUserId);
+
+    Task<Result<IReadOnlyList<AssigneeOptionModel>>> GetAssigneeCandidatesAsync(Guid taskId, Guid currentUserId);
 
 }

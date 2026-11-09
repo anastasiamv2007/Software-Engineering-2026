@@ -23,18 +23,20 @@ namespace SoftwareEngineering.Client
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
 
+
         private static readonly string[] CategoryPalette =
         {
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, IProjectMemberService projectMemberService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
             this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
             this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
+
             BuildCategoryPalette();
             StartCategoryCreateMode();
 
@@ -497,7 +499,7 @@ namespace SoftwareEngineering.Client
             }
         }
 
-        private void GoToEdit_Click(object sender, RoutedEventArgs e)
+        private async void GoToEdit_Click(object sender, RoutedEventArgs e)
         {
             if (TasksDataGrid.SelectedItem is TaskModel selected)
             {
@@ -517,9 +519,12 @@ namespace SoftwareEngineering.Client
                 }
 
                 SelectCategory(EditCategoryComboBox, selected.CategoryId);
+                await LoadAssigneeChoicesAsync(selected);
+
 
                 ShowPage("Edit");
             }
+
             else
             {
                 MessageBox.Show("Виберіть завдання зі списку.", "Увага", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -546,6 +551,19 @@ namespace SoftwareEngineering.Client
                 currentSelectedTask.CategoryId = GetSelectedCategoryId(EditCategoryComboBox);
 
                 await taskService.UpdateAsync(currentSelectedTask, CurrentUserId);
+                if (EditAssigneeComboBox.IsEnabled)
+                {
+                    var newAssigneeId = (EditAssigneeComboBox.SelectedItem as ComboBoxItem)?.Tag as Guid?;
+                    if (newAssigneeId != currentSelectedTask.AssigneeId)
+                    {
+                        var assignResult = await taskService.AssignAsync(currentSelectedTask.Id, newAssigneeId, CurrentUserId);
+                        if (assignResult.IsFailure)
+                        {
+                            MessageBox.Show(assignResult.Error!.Message, "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+                    }
+                }
 
                 Log.Information("Оновлено завдання ID: {TaskId}", currentSelectedTask.Id);
                 MessageBox.Show("Завдання успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -798,6 +816,29 @@ namespace SoftwareEngineering.Client
         }
 
 
+        private async Task LoadAssigneeChoicesAsync(TaskModel task)
+        {
+            EditAssigneeComboBox.Items.Clear();
+            EditAssigneeComboBox.Items.Add(new ComboBoxItem { Content = "Не призначено" });
+            EditAssigneeComboBox.SelectedIndex = 0;
+            EditAssigneeComboBox.IsEnabled = false;
+
+            var result = await taskService.GetAssigneeCandidatesAsync(task.Id, CurrentUserId);
+            if (result.IsFailure)
+            {
+                return;
+            }
+
+            foreach (var option in result.Value!)
+            {
+                EditAssigneeComboBox.Items.Add(new ComboBoxItem { Content = option.FullName, Tag = option.UserId });
+            }
+
+            EditAssigneeComboBox.SelectedItem = EditAssigneeComboBox.Items
+                .OfType<ComboBoxItem>()
+                .FirstOrDefault(item => item.Tag as Guid? == task.AssigneeId) ?? EditAssigneeComboBox.Items[0];
+            EditAssigneeComboBox.IsEnabled = true;
+        }
 
 
     }
