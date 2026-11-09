@@ -51,6 +51,9 @@ public partial class App : Application
         // Реєстрація сервісів BLL і DAL
         services.AddBusinessLogic(connectionString);
 
+        services.AddScoped<SoftwareEngineering.DAL.Repositories.ICommentRepository, SoftwareEngineering.DAL.Repositories.CommentRepository>();
+        services.AddScoped<SoftwareEngineering.BLL.Services.CommentService>();
+
         services.AddSingleton<UserSession>();
         services.AddSingleton<IUserSession>(sp => sp.GetRequiredService<UserSession>());
 

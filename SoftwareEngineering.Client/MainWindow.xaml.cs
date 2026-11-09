@@ -5,6 +5,7 @@ using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Enums;
+using SoftwareEngineering.DAL.Repositories;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -22,6 +23,10 @@ namespace SoftwareEngineering.Client
         private readonly ICategoryService categoryService;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
+        private readonly CommentService commentService;
+        private readonly ICommentRepository commentRepository;
+        private Guid currentSelectedTaskId;
+        private Guid currentSelectedProjectId;
 
 
         private static readonly string[] CategoryPalette =
@@ -29,13 +34,15 @@ namespace SoftwareEngineering.Client
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, IProjectMemberService projectMemberService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, IProjectMemberService projectMemberService, CommentService commentService, ICommentRepository commentRepository)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
             this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
             this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
+            this.commentService = commentService ?? throw new ArgumentNullException(nameof(commentService));
+            this.commentRepository = commentRepository ?? throw new ArgumentNullException(nameof(commentRepository));
 
             BuildCategoryPalette();
             StartCategoryCreateMode();
@@ -432,6 +439,9 @@ namespace SoftwareEngineering.Client
                 : details.CanEdit ? "Редагування (без дедлайну та видалення)" : "Лише перегляд");
 
             DetailsEditButton.IsEnabled = details.CanEdit;
+            currentSelectedTaskId = task.Id;
+            currentSelectedProjectId = task.ProjectId;
+            _ = LoadTaskCommentsAsync(task.Id, task.ProjectId);
         }
 
         private void AddInfoRow(string label, string value)
@@ -847,7 +857,56 @@ namespace SoftwareEngineering.Client
                 .FirstOrDefault(item => item.Tag as Guid? == task.AssigneeId) ?? EditAssigneeComboBox.Items[0];
             EditAssigneeComboBox.IsEnabled = true;
         }
+        private async Task LoadTaskCommentsAsync(Guid taskId, Guid projectId)
+        {
+            try
+            {
+                var comments = await commentService.GetTaskCommentsAsync(taskId, projectId);
+                LstTaskComments.ItemsSource = comments;
 
+                if (LstTaskComments.Items.Count > 0)
+                {
+                    LstTaskComments.ScrollIntoView(LstTaskComments.Items[LstTaskComments.Items.Count - 1]);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не вдалося завантажити коментарі: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private async void BtnSendTaskComment_Click(object sender, RoutedEventArgs e)
+        {
+            var content = TxtNewTaskComment.Text;
+            if (string.IsNullOrWhiteSpace(content)) return;
+
+            var currentUserId = CurrentUserId;
+
+            BtnSendTaskComment.IsEnabled = false;
+
+            try
+            {
+                var result = await commentService.AddCommentAsync(currentSelectedTaskId, currentUserId, content);
+
+                if (result.IsSuccess)
+                {
+                    TxtNewTaskComment.Text = string.Empty;
+                    await LoadTaskCommentsAsync(currentSelectedTaskId, currentSelectedProjectId);
+                }
+                else
+                {
+                    MessageBox.Show(result.Error?.Message ?? "Помилка валідації", "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Системна помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                BtnSendTaskComment.IsEnabled = true;
+            }
+        }
 
     }
 }
