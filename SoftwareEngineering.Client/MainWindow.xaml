@@ -389,10 +389,45 @@
                                     <Border Background="#F1F5F9" CornerRadius="8" Padding="12" Margin="0,0,0,16">
                                         <TextBlock x:Name="DetailsDescriptionText" TextWrapping="Wrap" FontSize="14" Foreground="#334155"/>
                                     </Border>
-                                    <TextBlock Text="Прогрес" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock x:Name="DetailsCommentsText" FontSize="14" Foreground="#334155"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Підзадачі (чек-лист): права приходять із TaskDetailsModel -->
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Підзадачі" Style="{StaticResource FieldLabel}"/>
                                     <TextBlock x:Name="DetailsSubtasksText" FontSize="14" Foreground="#334155" Margin="0,0,0,6"/>
                                     <ProgressBar x:Name="DetailsSubtasksProgress" Height="8" Maximum="100" Margin="0,0,0,12"/>
-                                    <TextBlock x:Name="DetailsCommentsText" FontSize="14" Foreground="#334155"/>
+
+                                    <!-- Tag списку — видимість кнопки видалення (лише автор завдання або власник проєкту) -->
+                                    <ItemsControl x:Name="DetailsSubtasksList" Tag="{x:Static Visibility.Collapsed}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <DockPanel Margin="0,4">
+                                                    <Button DockPanel.Dock="Right" Content="✕" Width="28" Height="24" Padding="0"
+                                                            Background="Transparent" BorderThickness="0" Foreground="#EF4444" Cursor="Hand"
+                                                            ToolTip="Видалити підзадачу" Tag="{Binding Id}" Click="DeleteSubtask_Click"
+                                                            Visibility="{Binding Tag, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                    <!-- Click, а не Checked: спрацьовує лише від дії користувача, не під час завантаження списку -->
+                                                    <CheckBox IsChecked="{Binding IsCompleted, Mode=OneWay}" Tag="{Binding Id}" Click="SubtaskCheckBox_Click"
+                                                              VerticalAlignment="Center" VerticalContentAlignment="Center">
+                                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Foreground="#0F172A" Margin="4,0,0,0"/>
+                                                    </CheckBox>
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <Grid x:Name="DetailsAddSubtaskPanel" Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="NewSubtaskTitleTextBox" Height="32" VerticalContentAlignment="Center" Padding="8,0" Margin="0,0,8,0"
+                                                 MaxLength="200" KeyDown="NewSubtaskTitleTextBox_KeyDown"/>
+                                        <Button Grid.Column="1" Content="Додати" Style="{StaticResource PrimaryButton}" Click="AddSubtask_Click"/>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 

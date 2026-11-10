@@ -20,6 +20,8 @@ namespace SoftwareEngineering.Client
         private IReadOnlyList<TaskModel> allTasks = new List<TaskModel>();
         private TaskModel? currentSelectedTask;
         private readonly ICategoryService categoryService;
+        private readonly ISubtaskService subtaskService;
+        private Guid? detailsTaskId;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
 
@@ -29,13 +31,14 @@ namespace SoftwareEngineering.Client
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, IProjectMemberService projectMemberService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
             this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
             this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
+            this.subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
 
             BuildCategoryPalette();
             StartCategoryCreateMode();
@@ -363,6 +366,7 @@ namespace SoftwareEngineering.Client
                 try
                 {
                     ShowTaskDetails(await taskService.GetDetailsAsync(selected.Id, CurrentUserId));
+                    await LoadSubtasksAsync();
                     ShowPage("Details");
                 }
                 catch (ValidationException ex)
@@ -402,10 +406,6 @@ namespace SoftwareEngineering.Client
 
             DetailsDescriptionText.Text = string.IsNullOrWhiteSpace(task.Description) ? "Немає опису" : task.Description;
 
-            DetailsSubtasksText.Text = details.SubtasksTotal == 0
-                ? "Підзадач немає"
-                : $"Підзадачі: виконано {details.SubtasksCompleted} з {details.SubtasksTotal}";
-            DetailsSubtasksProgress.Value = details.SubtasksTotal == 0 ? 0 : details.SubtasksCompleted * 100.0 / details.SubtasksTotal;
             DetailsCommentsText.Text = $"Коментарів: {details.CommentsCount}";
 
             DetailsMembersList.ItemsSource = details.Members
@@ -432,6 +432,14 @@ namespace SoftwareEngineering.Client
                 : details.CanEdit ? "Редагування (без дедлайну та видалення)" : "Лише перегляд");
 
             DetailsEditButton.IsEnabled = details.CanEdit;
+
+            // Ті самі права, що перевіряє SubtaskService: відмічати може і виконавець, видаляти — автор завдання або власник проєкту
+            detailsTaskId = task.Id;
+            var canEditSubtasks = details.CanEdit || task.AssigneeId == CurrentUserId;
+            DetailsSubtasksList.IsEnabled = canEditSubtasks;
+            DetailsAddSubtaskPanel.Visibility = canEditSubtasks ? Visibility.Visible : Visibility.Collapsed;
+            DetailsSubtasksList.Tag = details.CanDeleteOrChangeDeadline ? Visibility.Visible : Visibility.Collapsed;
+            NewSubtaskTitleTextBox.Clear();
         }
 
         private void AddInfoRow(string label, string value)
@@ -849,5 +857,105 @@ namespace SoftwareEngineering.Client
         }
 
 
+        // ---------- Підзадачі ----------
+        private async Task LoadSubtasksAsync()
+        {
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
+
+            var result = await subtaskService.GetByTaskAsync(taskId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                DetailsSubtasksList.ItemsSource = null;
+                DetailsSubtasksText.Text = result.Error!.Message;
+                DetailsSubtasksProgress.Value = 0;
+                return;
+            }
+
+            ShowSubtasks(result.Value!);
+        }
+
+        private void ShowSubtasks(IReadOnlyList<SubtaskModel> subtasks)
+        {
+            DetailsSubtasksList.ItemsSource = subtasks;
+
+            var completed = subtasks.Count(subtask => subtask.IsCompleted);
+            DetailsSubtasksText.Text = subtasks.Count == 0
+                ? "Підзадач немає"
+                : $"Виконано {completed} з {subtasks.Count}";
+            DetailsSubtasksProgress.Value = subtasks.Count == 0 ? 0 : completed * 100.0 / subtasks.Count;
+        }
+
+        private async void AddSubtask_Click(object sender, RoutedEventArgs e)
+        {
+            await AddSubtaskAsync();
+        }
+
+        private async void NewSubtaskTitleTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                await AddSubtaskAsync();
+            }
+        }
+
+        private async Task AddSubtaskAsync()
+        {
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
+
+            var result = await subtaskService.AddAsync(taskId, NewSubtaskTitleTextBox.Text, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Підзадачу не додано", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            NewSubtaskTitleTextBox.Clear();
+            await LoadSubtasksAsync();
+        }
+
+        private async void SubtaskCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not CheckBox { Tag: Guid subtaskId } checkBox)
+            {
+                return;
+            }
+
+            var result = await subtaskService.SetCompletedAsync(subtaskId, checkBox.IsChecked == true, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            // Перечитуємо з БД: і після успіху (прогрес), і після помилки (повертаємо галочку у справжній стан)
+            await LoadSubtasksAsync();
+        }
+
+        private async void DeleteSubtask_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: Guid subtaskId })
+            {
+                return;
+            }
+
+            var answer = MessageBox.Show("Видалити підзадачу?", "Підтвердження", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var result = await subtaskService.DeleteAsync(subtaskId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Підзадачу не видалено", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            await LoadSubtasksAsync();
+        }
     }
 }
