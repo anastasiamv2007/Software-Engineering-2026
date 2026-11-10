@@ -21,6 +21,7 @@ namespace SoftwareEngineering.Client
         private TaskModel? currentSelectedTask;
         private readonly ICategoryService categoryService;
         private readonly ISubtaskService subtaskService;
+        private readonly ICommentService commentService;
         private Guid? detailsTaskId;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
@@ -31,7 +32,7 @@ namespace SoftwareEngineering.Client
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
@@ -39,6 +40,7 @@ namespace SoftwareEngineering.Client
             this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
             this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
             this.subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
+            this.commentService = commentService ?? throw new ArgumentNullException(nameof(commentService));
 
             BuildCategoryPalette();
             StartCategoryCreateMode();
@@ -367,6 +369,7 @@ namespace SoftwareEngineering.Client
                 {
                     ShowTaskDetails(await taskService.GetDetailsAsync(selected.Id, CurrentUserId));
                     await LoadSubtasksAsync();
+                    await LoadCommentsAsync();
                     ShowPage("Details");
                 }
                 catch (ValidationException ex)
@@ -406,7 +409,6 @@ namespace SoftwareEngineering.Client
 
             DetailsDescriptionText.Text = string.IsNullOrWhiteSpace(task.Description) ? "Немає опису" : task.Description;
 
-            DetailsCommentsText.Text = $"Коментарів: {details.CommentsCount}";
 
             DetailsMembersList.ItemsSource = details.Members
                 .Select(member => new { member.FullName, member.Email, Role = RoleText(member.Role) })
@@ -440,6 +442,7 @@ namespace SoftwareEngineering.Client
             DetailsAddSubtaskPanel.Visibility = canEditSubtasks ? Visibility.Visible : Visibility.Collapsed;
             DetailsSubtasksList.Tag = details.CanDeleteOrChangeDeadline ? Visibility.Visible : Visibility.Collapsed;
             NewSubtaskTitleTextBox.Clear();
+            NewCommentTextBox.Clear();
         }
 
         private void AddInfoRow(string label, string value)
@@ -856,6 +859,91 @@ namespace SoftwareEngineering.Client
             EditAssigneeComboBox.IsEnabled = true;
         }
 
+        // ---------- Коментарі ----------
+        private async Task LoadCommentsAsync()
+        {
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
+
+            var result = await commentService.GetByTaskAsync(taskId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                DetailsCommentsList.ItemsSource = null;
+                DetailsCommentsText.Text = $"Коментарі: {result.Error!.Message}";
+                return;
+            }
+
+            var comments = result.Value!;
+            DetailsCommentsText.Text = comments.Count == 0 ? "Коментарі (поки немає)" : $"Коментарі ({comments.Count})";
+            DetailsCommentsList.ItemsSource = comments
+                .Select(comment => new
+                {
+                    comment.Id,
+                    comment.Content,
+                    Header = comment.AuthorRole.HasValue
+                        ? $"{comment.AuthorName} ({RoleText(comment.AuthorRole.Value)})"
+                        : comment.AuthorName,
+                    // У БД час зберігається в UTC — показуємо місцевий
+                    Time = comment.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                    DeleteVisibility = comment.CanDelete ? Visibility.Visible : Visibility.Collapsed,
+                })
+                .ToList();
+
+            if (DetailsCommentsList.Items.Count > 0)
+            {
+                DetailsCommentsList.ScrollIntoView(DetailsCommentsList.Items[^1]);
+            }
+        }
+
+        private async void SendComment_Click(object sender, RoutedEventArgs e)
+        {
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
+
+            SendCommentButton.IsEnabled = false;
+            try
+            {
+                var result = await commentService.AddAsync(taskId, NewCommentTextBox.Text, CurrentUserId);
+                if (result.IsFailure)
+                {
+                    MessageBox.Show(result.Error!.Message, "Коментар не надіслано", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                NewCommentTextBox.Clear();
+                await LoadCommentsAsync();
+            }
+            finally
+            {
+                SendCommentButton.IsEnabled = true;
+            }
+        }
+
+        private async void DeleteComment_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: Guid commentId })
+            {
+                return;
+            }
+
+            var answer = MessageBox.Show("Видалити коментар?", "Підтвердження", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var result = await commentService.DeleteAsync(commentId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Коментар не видалено", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            await LoadCommentsAsync();
+        }
 
         // ---------- Підзадачі ----------
         private async Task LoadSubtasksAsync()

@@ -386,10 +386,9 @@
                             <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Опис" Style="{StaticResource FieldLabel}"/>
-                                    <Border Background="#F1F5F9" CornerRadius="8" Padding="12" Margin="0,0,0,16">
+                                    <Border Background="#F1F5F9" CornerRadius="8" Padding="12">
                                         <TextBlock x:Name="DetailsDescriptionText" TextWrapping="Wrap" FontSize="14" Foreground="#334155"/>
                                     </Border>
-                                    <TextBlock x:Name="DetailsCommentsText" FontSize="14" Foreground="#334155"/>
                                 </StackPanel>
                             </Border>
 
@@ -431,6 +430,48 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- Коментарі: від старіших до новіших; ✕ видно лише автору коментаря та власнику проєкту -->
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock x:Name="DetailsCommentsText" Text="Коментарі" Style="{StaticResource FieldLabel}"/>
+
+                                    <ListBox x:Name="DetailsCommentsList" Background="Transparent" BorderThickness="0" MaxHeight="300"
+                                             ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             HorizontalContentAlignment="Stretch" Margin="0,0,0,12">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Content="✕" Width="24" Height="22" Padding="0" VerticalAlignment="Top"
+                                                                Background="Transparent" BorderThickness="0" Foreground="#EF4444" Cursor="Hand"
+                                                                ToolTip="Видалити коментар" Tag="{Binding Id}" Click="DeleteComment_Click"
+                                                                Visibility="{Binding DeleteVisibility}"/>
+                                                        <StackPanel>
+                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12" Margin="0,0,8,0"/>
+                                                                <TextBlock Text="{Binding Time}" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="#334155" FontSize="13"/>
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+
+                                    <Grid x:Name="DetailsAddCommentPanel">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="NewCommentTextBox" Height="54" TextWrapping="Wrap" AcceptsReturn="True" Padding="8"
+                                                 MaxLength="1000" VerticalScrollBarVisibility="Auto" FontSize="13" Foreground="#0F172A"/>
+                                        <Button x:Name="SendCommentButton" Grid.Column="1" Content="Надіслати" Style="{StaticResource PrimaryButton}"
+                                                Margin="8,0,0,0" VerticalAlignment="Bottom" Click="SendComment_Click"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
                             <Border Style="{StaticResource Card}">
                                 <StackPanel>
                                     <TextBlock Text="Учасники проєкту" Style="{StaticResource FieldLabel}"/>
@@ -450,7 +491,6 @@
                                 </StackPanel>
                             </Border>
                         </StackPanel>
-
                         <!-- Довідкова інформація: заповнюється з коду рядками «назва — значення» -->
                         <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
                             <StackPanel>

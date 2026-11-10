@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddSingleton<IUserSession, UserSession>();
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<ISubtaskService, SubtaskService>();
+        services.AddScoped<ICommentService, CommentService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IProjectMemberService, ProjectMemberService>();
         return services;
