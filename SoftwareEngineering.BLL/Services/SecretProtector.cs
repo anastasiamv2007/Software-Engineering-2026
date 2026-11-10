@@ -8,23 +8,26 @@ namespace SoftwareEngineering.BLL.Services;
 /// </summary>
 public static class SecretProtector
 {
-    private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("Planora.DbConnections.v1");
+    // Призначення секрету входить в ентропію: зашифрований пароль БД не розшифрується як сесія і навпаки
+    public const string DbPasswordPurpose = "Planora.DbConnections.v1";
 
-    public static string Protect(string secret)
+    public const string SessionPurpose = "Planora.RememberedSession.v1";
+
+    public static string Protect(string secret, string purpose = DbPasswordPurpose)
     {
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException("Шифрування паролів підтримується лише у Windows.");
         }
 
-        byte[] encrypted = ProtectedData.Protect(Encoding.UTF8.GetBytes(secret), Entropy, DataProtectionScope.CurrentUser);
+        byte[] encrypted = ProtectedData.Protect(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes(purpose), DataProtectionScope.CurrentUser);
         return Convert.ToBase64String(encrypted);
     }
 
     /// <summary>
     /// Повертає null, якщо секрет пошкоджений або зашифрований іншим користувачем Windows.
     /// </summary>
-    public static string? TryUnprotect(string protectedSecret)
+    public static string? TryUnprotect(string protectedSecret, string purpose = DbPasswordPurpose)
     {
         if (!OperatingSystem.IsWindows() || string.IsNullOrEmpty(protectedSecret))
         {
@@ -33,7 +36,7 @@ public static class SecretProtector
 
         try
         {
-            byte[] decrypted = ProtectedData.Unprotect(Convert.FromBase64String(protectedSecret), Entropy, DataProtectionScope.CurrentUser);
+            byte[] decrypted = ProtectedData.Unprotect(Convert.FromBase64String(protectedSecret), Encoding.UTF8.GetBytes(purpose), DataProtectionScope.CurrentUser);
             return Encoding.UTF8.GetString(decrypted);
         }
         catch (Exception ex) when (ex is CryptographicException or FormatException)

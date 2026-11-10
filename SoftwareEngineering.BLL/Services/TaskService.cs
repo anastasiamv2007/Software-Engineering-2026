@@ -1,5 +1,6 @@
 ﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.DAL.Entities;
 using SoftwareEngineering.DAL.Enums;
 using SoftwareEngineering.DAL.Repositories;
@@ -284,6 +285,127 @@ public class TaskService : BaseService, ITaskService
         });
     }
 
+    // Призначення виконавця
+    public async Task<Result<TaskModel>> AssignAsync(Guid taskId, Guid? assigneeId, Guid currentUserId)
+    {
+        try
+        {
+            this.Logger.Information(
+                "Спроба призначити виконавця {AssigneeId} на завдання {TaskId} користувачем {UserId}",
+                assigneeId,
+                taskId,
+                currentUserId);
+
+            if (taskId == Guid.Empty)
+            {
+                return this.AssignFail<TaskModel>(ErrorType.Validation, "Ідентифікатор завдання не вказано.");
+            }
+
+            if (currentUserId == Guid.Empty)
+            {
+                return this.AssignFail<TaskModel>(ErrorType.Validation, "Ідентифікатор користувача не вказано.");
+            }
+
+            if (assigneeId == Guid.Empty)
+            {
+                return this.AssignFail<TaskModel>(ErrorType.Validation, "Некоректний ідентифікатор виконавця.");
+            }
+
+            var entity = await this.taskRepository.GetByIdAsync(taskId);
+            if (entity is null)
+            {
+                return this.AssignFail<TaskModel>(ErrorType.NotFound, "Завдання з таким ідентифікатором не знайдено.");
+            }
+
+            var role = await this.projectRepository.GetMemberRoleAsync(entity.ProjectId, currentUserId);
+            if (role is not (ProjectRole.Owner or ProjectRole.CoExecutor))
+            {
+                return this.AssignFail<TaskModel>(
+                    ErrorType.Forbidden,
+                    "Призначати виконавця можуть лише власник проєкту та співвиконавці.");
+            }
+
+            if (assigneeId.HasValue)
+            {
+                var assigneeRole = await this.projectRepository.GetMemberRoleAsync(entity.ProjectId, assigneeId.Value);
+                if (assigneeRole is null)
+                {
+                    return this.AssignFail<TaskModel>(
+                        ErrorType.Validation,
+                        "Вибраний користувач не є учасником цього проєкту.");
+                }
+            }
+
+            if (entity.AssigneeId == assigneeId)
+            {
+                return Result.Ok(ToModel(entity));
+            }
+
+            entity.AssigneeId = assigneeId;
+            await this.taskRepository.UpdateAsync(entity);
+
+            if (assigneeId.HasValue)
+            {
+                this.Logger.Information("Користувача {AssigneeId} призначено на {TaskId}", assigneeId.Value, taskId);
+            }
+            else
+            {
+                this.Logger.Information("Виконавця знято із завдання {TaskId}", taskId);
+            }
+
+            return Result.Ok(ToModel(entity));
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(ex, "Критична помилка під час призначення виконавця на завдання {TaskId}", taskId);
+            return Result.Fail<TaskModel>(ErrorType.Unexpected, "Сталася внутрішня помилка. Спробуйте ще раз.");
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<AssigneeOptionModel>>> GetAssigneeCandidatesAsync(Guid taskId, Guid currentUserId)
+    {
+        try
+        {
+            if (taskId == Guid.Empty || currentUserId == Guid.Empty)
+            {
+                return Result.Fail<IReadOnlyList<AssigneeOptionModel>>(ErrorType.Validation, "Не вказано завдання або користувача.");
+            }
+
+            var entity = await this.taskRepository.GetByIdAsync(taskId);
+            if (entity is null)
+            {
+                return Result.Fail<IReadOnlyList<AssigneeOptionModel>>(ErrorType.NotFound, "Завдання з таким ідентифікатором не знайдено.");
+            }
+
+            var role = await this.projectRepository.GetMemberRoleAsync(entity.ProjectId, currentUserId);
+            if (role is not (ProjectRole.Owner or ProjectRole.CoExecutor))
+            {
+                return Result.Fail<IReadOnlyList<AssigneeOptionModel>>(
+                    ErrorType.Forbidden,
+                    "Призначати виконавця можуть лише власник проєкту та співвиконавці.");
+            }
+
+            var users = await this.projectRepository.GetProjectUsersAsync(entity.ProjectId);
+            IReadOnlyList<AssigneeOptionModel> options = users
+                .Select(user => new AssigneeOptionModel { UserId = user.Id, FullName = user.FullName, Email = user.Email })
+                .ToList();
+
+            return Result.Ok(options);
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(ex, "Критична помилка під час отримання списку виконавців для завдання {TaskId}", taskId);
+            return Result.Fail<IReadOnlyList<AssigneeOptionModel>>(ErrorType.Unexpected, "Сталася внутрішня помилка. Спробуйте ще раз.");
+        }
+    }
+
+    private Result<T> AssignFail<T>(ErrorType type, string message)
+    {
+        this.Logger.Warning("Призначення виконавця відхилено ({ErrorType}): {ErrorMessage}", type, message);
+        return Result.Fail<T>(type, message);
+    }
+
+
     private static bool CanManage(TaskItem task, Guid userId, ProjectRole? role)
     {
         return task.OwnerId == userId || role == ProjectRole.Owner;
@@ -319,6 +441,7 @@ public class TaskService : BaseService, ITaskService
             CategoryColorHex = entity.Category?.ColorHex,
             Status = entity.Status,
             OwnerId = entity.OwnerId,
+            AssigneeId = entity.AssigneeId,
         };
     }
 

@@ -16,6 +16,11 @@ public partial class App : Application
 
     public IServiceProvider? ServiceProvider { get; private set; }
 
+    /// <summary>
+    /// Збережене підключення, до якого зараз під'єднано застосунок (до нього прив'язується «Запам'ятати мене»).
+    /// </summary>
+    public Guid? CurrentConnectionId { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -35,10 +40,11 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    public void ConfigureServices(string connectionString)
+    public void ConfigureServices(string connectionString, Guid connectionId)
     {
         // Якщо раніше було підключення до іншої бази — звільняємо старий контейнер
         DisposeServices();
+        CurrentConnectionId = connectionId;
 
         var services = new ServiceCollection();
 
@@ -47,8 +53,6 @@ public partial class App : Application
 
         services.AddSingleton<UserSession>();
         services.AddSingleton<IUserSession>(sp => sp.GetRequiredService<UserSession>());
-
-        
 
         // Реєстрація вікон
         services.AddTransient<LoginWindow>();
@@ -69,25 +73,92 @@ public partial class App : Application
 
     /// <summary>
     /// Вихід з облікового запису: база лишається підключеною, відкривається вікно логіну.
+    /// Збережений вхід для цієї бази забувається — до наступного входу з галочкою.
     /// </summary>
     public void SignOut()
     {
         var session = GetService<IUserSession>();
         Log.Information("Користувач {UserId} вийшов з облікового запису", session.CurrentUserId);
+        ForgetCurrentSession();
         session.Clear();
         SwitchTo(GetService<LoginWindow>());
     }
 
     /// <summary>
-    /// Вихід з облікового запису та відключення від бази: відкривається вікно вибору бази даних.
+    /// Відключення від бази: відкривається вікно вибору бази даних (без автоматичного підключення).
+    /// Збережений вхід для цієї бази лишається — при наступному виборі цієї бази логін не знадобиться.
     /// </summary>
     public void SignOutAndDisconnect()
     {
         Log.Information(
-            "Користувач {UserId} вийшов з облікового запису та відключився від бази даних",
+            "Користувач {UserId} відключився від бази даних",
             ServiceProvider?.GetService<IUserSession>()?.CurrentUserId);
-        SwitchTo(new DatabaseSelectionWindow(setupService));
+        SwitchTo(new DatabaseSelectionWindow(setupService, autoConnect: false));
         DisposeServices();
+    }
+
+    /// <summary>
+    /// Пробує увійти за збереженою для поточної бази сесією. Недійсну сесію одразу забуває.
+    /// </summary>
+    public async Task<bool> TryRestoreSessionAsync()
+    {
+        if (CurrentConnectionId is not { } connectionId)
+        {
+            return false;
+        }
+
+        var remembered = setupService.GetRememberedSession(connectionId);
+        if (remembered == null)
+        {
+            return false;
+        }
+
+        var user = await GetService<IAuthService>().RestoreSessionAsync(remembered);
+        if (user == null)
+        {
+            setupService.ForgetSession(connectionId);
+            return false;
+        }
+
+        GetService<IUserSession>().SetUser(user);
+        return true;
+    }
+
+    /// <summary>
+    /// Після входу: з галочкою — запам'ятовує акаунт для поточної бази, без неї — забуває попередній.
+    /// </summary>
+    public async Task UpdateRememberedSessionAsync(Guid userId, bool remember)
+    {
+        if (CurrentConnectionId is not { } connectionId)
+        {
+            return;
+        }
+
+        try
+        {
+            if (remember)
+            {
+                var session = await GetService<IAuthService>().CreateRememberedSessionAsync(userId);
+                setupService.RememberSession(connectionId, session);
+            }
+            else
+            {
+                setupService.ForgetSession(connectionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Вхід уже виконано — невдале збереження сесії не має його зривати
+            Log.Warning(ex, "Не вдалося оновити збережений вхід для підключення {ConnectionId}", connectionId);
+        }
+    }
+
+    private void ForgetCurrentSession()
+    {
+        if (CurrentConnectionId is { } connectionId)
+        {
+            setupService.ForgetSession(connectionId);
+        }
     }
 
     /// <summary>
@@ -111,7 +182,8 @@ public partial class App : Application
 
     private void ShowDatabaseSelection()
     {
-        new DatabaseSelectionWindow(setupService).Show();
+        // Під час запуску одразу підключаємось до останньої бази, якщо для неї збережено вхід
+        new DatabaseSelectionWindow(setupService, autoConnect: true).Show();
     }
 
     /// <summary>
@@ -139,5 +211,6 @@ public partial class App : Application
 
         // Сесія — singleton у контейнері, тож разом з ним зникає і поточний користувач
         ServiceProvider = null;
+        CurrentConnectionId = null;
     }
 }

@@ -1,4 +1,6 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using Serilog;
 using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Interfaces;
@@ -101,6 +103,46 @@ public class AuthService : IAuthService {
     private static ValidationException RegistrationFailed(string? email, string reason) {
         Logger.Warning("Невдала реєстрація {Email}: {Reason}", email, reason);
         return new ValidationException(reason);
+    }
+
+    public async Task<RememberedSessionModel> CreateRememberedSessionAsync(Guid userId, CancellationToken cancellationToken = default) {
+        var user = await _userRepository.GetByIdAsync(userId, cancellationToken)
+            ?? throw new ValidationException("Користувача не знайдено.");
+
+        return new RememberedSessionModel {
+            UserId = user.Id,
+            PasswordStamp = CreatePasswordStamp(user.PasswordHash),
+            CreatedAt = DateTime.UtcNow
+        };
+    }
+
+    public async Task<UserModel?> RestoreSessionAsync(RememberedSessionModel session, CancellationToken cancellationToken = default) {
+        var user = await _userRepository.GetByIdAsync(session.UserId, cancellationToken);
+        if (user == null) {
+            Logger.Warning("Збережений вхід недійсний: користувача {UserId} не знайдено в цій базі", session.UserId);
+            return null;
+        }
+
+        byte[] expected = Encoding.UTF8.GetBytes(CreatePasswordStamp(user.PasswordHash));
+        byte[] actual = Encoding.UTF8.GetBytes(session.PasswordStamp ?? string.Empty);
+        if (!CryptographicOperations.FixedTimeEquals(expected, actual)) {
+            Logger.Warning("Збережений вхід користувача {UserId} недійсний: пароль змінено", user.Id);
+            return null;
+        }
+
+        Logger.Information("Автоматичний вхід користувача {UserId} ({Email}) за збереженою сесією", user.Id, user.Email);
+
+        return new UserModel {
+            Id = user.Id,
+            Email = user.Email,
+            FullName = user.FullName,
+            CreatedAt = user.CreatedAt
+        };
+    }
+
+    // Відбиток хешу, а не сам хеш: на диску не лежить нічого, з чим можна підбирати пароль
+    private static string CreatePasswordStamp(string passwordHash) {
+        return Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(passwordHash)));
     }
 
     public async Task<UserModel?> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken = default) {

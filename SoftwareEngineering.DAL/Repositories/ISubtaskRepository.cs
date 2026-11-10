@@ -1,15 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using SoftwareEngineering.DAL.Entities;
+﻿using SoftwareEngineering.DAL.Entities;
 
-namespace SoftwareEngineering.DAL.Repositories
+namespace SoftwareEngineering.DAL.Repositories;
+
+public interface ISubtaskRepository
 {
-    public interface ISubtaskRepository
-    {
-        Task<SubtaskEntity> AddAsync(SubtaskEntity entity);
-        Task UpdateStatusAsync(Guid id, bool isCompleted);
-        Task DeleteAsync(Guid id);
-        Task<IEnumerable<SubtaskEntity>> GetByTaskIdAsync(Guid taskId);
-    }
+    Task<IReadOnlyList<Subtask>> GetByTaskIdAsync(Guid taskId);
+
+    Task<Subtask?> GetByIdAsync(Guid id);
+
+    Task AddAsync(Subtask subtask);
+
+    Task UpdateAsync(Subtask subtask);
+
+    Task DeleteAsync(Guid id);
 }

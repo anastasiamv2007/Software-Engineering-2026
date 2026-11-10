@@ -16,7 +16,7 @@ public static class DependencyInjection
 
         services.AddScoped<ITaskRepository, TaskRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
-        services.AddScoped<ISubtaskRepository>(sp => new SubtaskRepository(connectionString));
+        services.AddScoped<ISubtaskRepository, SubtaskRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         return services;

@@ -14,16 +14,17 @@ namespace SoftwareEngineering.Client
 {
     public partial class MainWindow : Window
     {
-        
         private readonly ITaskService taskService;
         private readonly IProjectService projectService;
         private readonly IUserSession userSession;
         private IReadOnlyList<TaskModel> allTasks = new List<TaskModel>();
         private TaskModel? currentSelectedTask;
         private readonly ICategoryService categoryService;
-        private readonly ISubtaskService _subtaskService; //
+        private readonly ISubtaskService subtaskService;
+        private Guid? detailsTaskId;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
+
 
         private static readonly string[] CategoryPalette =
         {
@@ -37,7 +38,8 @@ namespace SoftwareEngineering.Client
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
             this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
             this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
-            this._subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
+            this.subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
+
             BuildCategoryPalette();
             StartCategoryCreateMode();
 
@@ -57,8 +59,6 @@ namespace SoftwareEngineering.Client
                 await LoadTasksAsync();
             };
         }
-
-       
 
         private void TasksDataGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
@@ -82,7 +82,11 @@ namespace SoftwareEngineering.Client
 
         private void SignOut_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show("Ви дійсно хочете вийти з облікового запису?", "Вихід", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            var result = MessageBox.Show(
+                "Ви дійсно хочете вийти з облікового запису?\nЗбережений вхід на цьому пристрої буде скасовано.",
+                "Вихід",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
             {
                 ((App)Application.Current).SignOut();
@@ -91,7 +95,11 @@ namespace SoftwareEngineering.Client
 
         private void SignOutAndDisconnect_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show("Вийти з облікового запису та обрати іншу базу даних?", "Змінити базу", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            var result = MessageBox.Show(
+                "Відключитися від цієї бази та обрати іншу?\nЯкщо вхід збережено, для цієї бази логін наступного разу не знадобиться.",
+                "Змінити базу",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
             if (result == MessageBoxResult.Yes)
             {
                 ((App)Application.Current).SignOutAndDisconnect();
@@ -355,10 +363,10 @@ namespace SoftwareEngineering.Client
         {
             if (TasksDataGrid.SelectedItem is TaskModel selected)
             {
-                currentSelectedTask = selected; //
                 try
                 {
                     ShowTaskDetails(await taskService.GetDetailsAsync(selected.Id, CurrentUserId));
+                    await LoadSubtasksAsync();
                     ShowPage("Details");
                 }
                 catch (ValidationException ex)
@@ -398,10 +406,6 @@ namespace SoftwareEngineering.Client
 
             DetailsDescriptionText.Text = string.IsNullOrWhiteSpace(task.Description) ? "Немає опису" : task.Description;
 
-            DetailsSubtasksText.Text = details.SubtasksTotal == 0
-                ? "Підзадач немає"
-                : $"Підзадачі: виконано {details.SubtasksCompleted} з {details.SubtasksTotal}";
-            DetailsSubtasksProgress.Value = details.SubtasksTotal == 0 ? 0 : details.SubtasksCompleted * 100.0 / details.SubtasksTotal;
             DetailsCommentsText.Text = $"Коментарів: {details.CommentsCount}";
 
             DetailsMembersList.ItemsSource = details.Members
@@ -429,8 +433,13 @@ namespace SoftwareEngineering.Client
 
             DetailsEditButton.IsEnabled = details.CanEdit;
 
-            icSubtasks.ItemsSource = currentSelectedTask?.Subtasks;
-            UpdateSubtaskProgress();
+            // Ті самі права, що перевіряє SubtaskService: відмічати може і виконавець, видаляти — автор завдання або власник проєкту
+            detailsTaskId = task.Id;
+            var canEditSubtasks = details.CanEdit || task.AssigneeId == CurrentUserId;
+            DetailsSubtasksList.IsEnabled = canEditSubtasks;
+            DetailsAddSubtaskPanel.Visibility = canEditSubtasks ? Visibility.Visible : Visibility.Collapsed;
+            DetailsSubtasksList.Tag = details.CanDeleteOrChangeDeadline ? Visibility.Visible : Visibility.Collapsed;
+            NewSubtaskTitleTextBox.Clear();
         }
 
         private void AddInfoRow(string label, string value)
@@ -506,7 +515,7 @@ namespace SoftwareEngineering.Client
             }
         }
 
-        private void GoToEdit_Click(object sender, RoutedEventArgs e)
+        private async void GoToEdit_Click(object sender, RoutedEventArgs e)
         {
             if (TasksDataGrid.SelectedItem is TaskModel selected)
             {
@@ -526,9 +535,12 @@ namespace SoftwareEngineering.Client
                 }
 
                 SelectCategory(EditCategoryComboBox, selected.CategoryId);
+                await LoadAssigneeChoicesAsync(selected);
+
 
                 ShowPage("Edit");
             }
+
             else
             {
                 MessageBox.Show("Виберіть завдання зі списку.", "Увага", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -555,6 +567,19 @@ namespace SoftwareEngineering.Client
                 currentSelectedTask.CategoryId = GetSelectedCategoryId(EditCategoryComboBox);
 
                 await taskService.UpdateAsync(currentSelectedTask, CurrentUserId);
+                if (EditAssigneeComboBox.IsEnabled)
+                {
+                    var newAssigneeId = (EditAssigneeComboBox.SelectedItem as ComboBoxItem)?.Tag as Guid?;
+                    if (newAssigneeId != currentSelectedTask.AssigneeId)
+                    {
+                        var assignResult = await taskService.AssignAsync(currentSelectedTask.Id, newAssigneeId, CurrentUserId);
+                        if (assignResult.IsFailure)
+                        {
+                            MessageBox.Show(assignResult.Error!.Message, "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
+                    }
+                }
 
                 Log.Information("Оновлено завдання ID: {TaskId}", currentSelectedTask.Id);
                 MessageBox.Show("Завдання успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -807,80 +832,130 @@ namespace SoftwareEngineering.Client
         }
 
 
-
-
-        private void UpdateSubtaskProgress()
+        private async Task LoadAssigneeChoicesAsync(TaskModel task)
         {
-            if (currentSelectedTask == null || currentSelectedTask.Subtasks == null) return;
+            EditAssigneeComboBox.Items.Clear();
+            EditAssigneeComboBox.Items.Add(new ComboBoxItem { Content = "Не призначено" });
+            EditAssigneeComboBox.SelectedIndex = 0;
+            EditAssigneeComboBox.IsEnabled = false;
 
-            int total = currentSelectedTask.Subtasks.Count;
-            int completed = currentSelectedTask.Subtasks.Count(s => s.IsCompleted);
+            var result = await taskService.GetAssigneeCandidatesAsync(task.Id, CurrentUserId);
+            if (result.IsFailure)
+            {
+                return;
+            }
 
-            txtSubtaskProgress.Text = $"Прогрес: {completed} з {total}";
-            pbSubtaskProgress.Maximum = total == 0 ? 1 : total;
-            pbSubtaskProgress.Value = completed;
+            foreach (var option in result.Value!)
+            {
+                EditAssigneeComboBox.Items.Add(new ComboBoxItem { Content = option.FullName, Tag = option.UserId });
+            }
+
+            EditAssigneeComboBox.SelectedItem = EditAssigneeComboBox.Items
+                .OfType<ComboBoxItem>()
+                .FirstOrDefault(item => item.Tag as Guid? == task.AssigneeId) ?? EditAssigneeComboBox.Items[0];
+            EditAssigneeComboBox.IsEnabled = true;
+        }
+
+
+        // ---------- Підзадачі ----------
+        private async Task LoadSubtasksAsync()
+        {
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
+
+            var result = await subtaskService.GetByTaskAsync(taskId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                DetailsSubtasksList.ItemsSource = null;
+                DetailsSubtasksText.Text = result.Error!.Message;
+                DetailsSubtasksProgress.Value = 0;
+                return;
+            }
+
+            ShowSubtasks(result.Value!);
+        }
+
+        private void ShowSubtasks(IReadOnlyList<SubtaskModel> subtasks)
+        {
+            DetailsSubtasksList.ItemsSource = subtasks;
+
+            var completed = subtasks.Count(subtask => subtask.IsCompleted);
+            DetailsSubtasksText.Text = subtasks.Count == 0
+                ? "Підзадач немає"
+                : $"Виконано {completed} з {subtasks.Count}";
+            DetailsSubtasksProgress.Value = subtasks.Count == 0 ? 0 : completed * 100.0 / subtasks.Count;
         }
 
         private async void AddSubtask_Click(object sender, RoutedEventArgs e)
         {
-            if (currentSelectedTask == null) return;
+            await AddSubtaskAsync();
+        }
 
-            string title = txtNewSubtaskTitle.Text;
-            var result = await _subtaskService.AddAsync(currentSelectedTask.Id, title);
-
-            if (result.IsSuccess)
+        private async void NewSubtaskTitleTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
             {
-                currentSelectedTask.Subtasks.Add(result.Value!);
-                txtNewSubtaskTitle.Clear();
-                UpdateSubtaskProgress();
-            }
-            else
-            {
-                MessageBox.Show(result.Error!.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                await AddSubtaskAsync();
             }
         }
 
-        private async void SubtaskCheckBox_Changed(object sender, RoutedEventArgs e)
+        private async Task AddSubtaskAsync()
         {
-            if (sender is CheckBox cb && cb.Tag is Guid subtaskId)
+            if (detailsTaskId is not { } taskId)
             {
-                bool isNowCompleted = cb.IsChecked ?? false;
-                UpdateSubtaskProgress();
-
-                var result = await _subtaskService.ToggleAsync(subtaskId, !isNowCompleted);
-
-                if (!result.IsSuccess)
-                {
-                    cb.IsChecked = !isNowCompleted;
-                    UpdateSubtaskProgress();
-                    MessageBox.Show(result.Error!.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+                return;
             }
+
+            var result = await subtaskService.AddAsync(taskId, NewSubtaskTitleTextBox.Text, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Підзадачу не додано", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            NewSubtaskTitleTextBox.Clear();
+            await LoadSubtasksAsync();
+        }
+
+        private async void SubtaskCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not CheckBox { Tag: Guid subtaskId } checkBox)
+            {
+                return;
+            }
+
+            var result = await subtaskService.SetCompletedAsync(subtaskId, checkBox.IsChecked == true, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            // Перечитуємо з БД: і після успіху (прогрес), і після помилки (повертаємо галочку у справжній стан)
+            await LoadSubtasksAsync();
         }
 
         private async void DeleteSubtask_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.Tag is Guid subtaskId)
+            if (sender is not Button { Tag: Guid subtaskId })
             {
-                var result = await _subtaskService.DeleteAsync(subtaskId);
-
-                if (result.IsSuccess)
-                {
-                    var subtaskToRemove = currentSelectedTask?.Subtasks.FirstOrDefault(s => s.Id == subtaskId);
-                    if (subtaskToRemove != null && currentSelectedTask != null)
-                    {
-                        currentSelectedTask.Subtasks.Remove(subtaskToRemove);
-                        UpdateSubtaskProgress();
-                    }
-                }
-                else
-                {
-                    MessageBox.Show(result.Error!.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+                return;
             }
+
+            var answer = MessageBox.Show("Видалити підзадачу?", "Підтвердження", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var result = await subtaskService.DeleteAsync(subtaskId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Підзадачу не видалено", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            await LoadSubtasksAsync();
         }
-
-
-
     }
 }

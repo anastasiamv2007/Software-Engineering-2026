@@ -1,12 +1,12 @@
-﻿using System;
+﻿namespace SoftwareEngineering.BLL.Models;
 
-namespace SoftwareEngineering.BLL.Models
+public class SubtaskModel
 {
-    public class SubtaskModel
-    {
-        public Guid Id { get; set; }
-        public Guid TaskId { get; set; } // Зв'язок із головним завданням
-        public string Title { get; set; } = string.Empty;
-        public bool IsCompleted { get; set; }
-    }
+    public Guid Id { get; set; }
+
+    public Guid TaskId { get; set; }
+
+    public string Title { get; set; } = string.Empty;
+
+    public bool IsCompleted { get; set; }
 }

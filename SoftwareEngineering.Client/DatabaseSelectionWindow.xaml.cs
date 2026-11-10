@@ -14,12 +14,12 @@ public partial class DatabaseSelectionWindow : Window
     private readonly IDatabaseSetupService dbService;
     private bool isBusy;
 
-    public DatabaseSelectionWindow(IDatabaseSetupService dbService)
+    public DatabaseSelectionWindow(IDatabaseSetupService dbService, bool autoConnect)
     {
         InitializeComponent();
         this.dbService = dbService ?? throw new ArgumentNullException(nameof(dbService));
 
-        Loaded += (_, _) =>
+        Loaded += async (_, _) =>
         {
             ReloadConnections();
 
@@ -27,6 +27,13 @@ public partial class DatabaseSelectionWindow : Window
             if (ConnectionsList.Items.Count == 0)
             {
                 OpenEditor(null);
+                return;
+            }
+
+            // Список відсортовано за часом підключення, тож перший — остання використана база
+            if (autoConnect && SelectedConnection is { HasRememberedSession: true, IsPasswordAvailable: true } last)
+            {
+                await ConnectAsync(last);
             }
         };
     }
@@ -164,10 +171,18 @@ public partial class DatabaseSelectionWindow : Window
             dbService.MarkAsUsed(connection.Id);
 
             var app = (App)Application.Current;
-            app.ConfigureServices(connectionString);
+            app.ConfigureServices(connectionString, connection.Id);
 
-            var loginWindow = app.GetService<LoginWindow>();
-            loginWindow.Show();
+            if (connection.HasRememberedSession)
+            {
+                SetBusy(true, "Вхід за збереженою сесією...");
+            }
+
+            // Збережений для цієї бази вхід відкриває програму одразу, інакше — вікно логіну
+            Window next = await app.TryRestoreSessionAsync()
+                ? app.GetService<MainWindow>()
+                : app.GetService<LoginWindow>();
+            next.Show();
             Close();
         }
         catch (Exception ex)

@@ -21,4 +21,16 @@ public interface IDatabaseSetupService
     void DeleteConnection(Guid connectionId);
 
     void MarkAsUsed(Guid connectionId);
+
+    /// <summary>
+    /// Збережений вхід для цієї бази (null, якщо його немає або його не вдалося розшифрувати).
+    /// </summary>
+    RememberedSessionModel? GetRememberedSession(Guid connectionId);
+
+    /// <summary>
+    /// Запам'ятовує вхід для бази; попередній збережений акаунт цієї бази замінюється.
+    /// </summary>
+    void RememberSession(Guid connectionId, RememberedSessionModel session);
+
+    void ForgetSession(Guid connectionId);
 }

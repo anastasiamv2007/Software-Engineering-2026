@@ -18,7 +18,11 @@
             <TextBox x:Name="EmailBox" Height="36" Margin="0,4,0,12" VerticalContentAlignment="Center" Padding="8,0"/>
 
             <TextBlock Text="Пароль" FontSize="12" FontWeight="SemiBold" Foreground="#334155"/>
-            <PasswordBox x:Name="PasswordBox" Height="36" Margin="0,4,0,20" VerticalContentAlignment="Center" Padding="8,0"/>
+            <PasswordBox x:Name="PasswordBox" Height="36" Margin="0,4,0,12" VerticalContentAlignment="Center" Padding="8,0"/>
+
+            <!-- Вхід зберігається лише для цієї бази і цього користувача Windows (DPAPI) -->
+            <CheckBox x:Name="RememberMeCheckBox" Content="Запам'ятати мене на цьому пристрої" Foreground="#334155" Margin="0,0,0,16"
+                      ToolTip="Наступного разу програма відкриється одразу, без логіну. Кнопка «Вийти» скасовує збережений вхід."/>
 
             <Button x:Name="SubmitButton" Content="Увійти в кабінет" Height="40" Background="#2563EB" Foreground="White" BorderThickness="0" FontWeight="Bold" Margin="0,0,0,12" Click="SubmitButton_Click"/>
 
