@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Кодові аналізатори -->
+		<PackageReference Include="Roslynator.Analyzers" Version="4.12.9">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Serilog" Version="4.4.0" />
+		<PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Зв'язок із шаром доступу до даних (DAL) -->
+		<ProjectReference Include="..\SoftwareEngineering.DAL\SoftwareEngineering.DAL.csproj" />
+	</ItemGroup>
+
+</Project>
