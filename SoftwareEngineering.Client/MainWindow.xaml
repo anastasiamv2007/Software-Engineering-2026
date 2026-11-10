@@ -386,53 +386,88 @@
                             <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Опис" Style="{StaticResource FieldLabel}"/>
-                                    <Border Background="#F1F5F9" CornerRadius="8" Padding="12" Margin="0,0,0,16">
+                                    <Border Background="#F1F5F9" CornerRadius="8" Padding="12">
                                         <TextBlock x:Name="DetailsDescriptionText" TextWrapping="Wrap" FontSize="14" Foreground="#334155"/>
                                     </Border>
+                                </StackPanel>
+                            </Border>
 
-                                    <TextBlock Text="Прогрес" Style="{StaticResource FieldLabel}"/>
+                            <!-- Підзадачі (чек-лист): права приходять із TaskDetailsModel -->
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Підзадачі" Style="{StaticResource FieldLabel}"/>
                                     <TextBlock x:Name="DetailsSubtasksText" FontSize="14" Foreground="#334155" Margin="0,0,0,6"/>
                                     <ProgressBar x:Name="DetailsSubtasksProgress" Height="8" Maximum="100" Margin="0,0,0,12"/>
-                                    <TextBlock x:Name="DetailsCommentsText" FontSize="14" Foreground="#334155" Margin="0,0,0,16"/>
 
-                                    <Separator Background="#E2E8F0" Margin="0,0,0,16"/>
+                                    <!-- Tag списку — видимість кнопки видалення (лише автор завдання або власник проєкту) -->
+                                    <ItemsControl x:Name="DetailsSubtasksList" Tag="{x:Static Visibility.Collapsed}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <DockPanel Margin="0,4">
+                                                    <Button DockPanel.Dock="Right" Content="✕" Width="28" Height="24" Padding="0"
+                                                            Background="Transparent" BorderThickness="0" Foreground="#EF4444" Cursor="Hand"
+                                                            ToolTip="Видалити підзадачу" Tag="{Binding Id}" Click="DeleteSubtask_Click"
+                                                            Visibility="{Binding Tag, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                    <!-- Click, а не Checked: спрацьовує лише від дії користувача, не під час завантаження списку -->
+                                                    <CheckBox IsChecked="{Binding IsCompleted, Mode=OneWay}" Tag="{Binding Id}" Click="SubtaskCheckBox_Click"
+                                                              VerticalAlignment="Center" VerticalContentAlignment="Center">
+                                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Foreground="#0F172A" Margin="4,0,0,0"/>
+                                                    </CheckBox>
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
 
-                                    <!-- СЕКЦІЯ КОМЕНТАРІВ -->
-                                    <TextBlock Text="Коментарі та обговорення" Style="{StaticResource FieldLabel}" Margin="0,0,0,8"/>
+                                    <Grid x:Name="DetailsAddSubtaskPanel" Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="NewSubtaskTitleTextBox" Height="32" VerticalContentAlignment="Center" Padding="8,0" Margin="0,0,8,0"
+                                                 MaxLength="200" KeyDown="NewSubtaskTitleTextBox_KeyDown"/>
+                                        <Button Grid.Column="1" Content="Додати" Style="{StaticResource PrimaryButton}" Click="AddSubtask_Click"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
 
-                                    <!-- Список коментарів (від старіших до новіших) -->
-                                    <ListBox x:Name="LstTaskComments" Background="Transparent" BorderThickness="0" MaxHeight="250" ScrollViewer.VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
+                            <!-- Коментарі: від старіших до новіших; ✕ видно лише автору коментаря та власнику проєкту -->
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock x:Name="DetailsCommentsText" Text="Коментарі" Style="{StaticResource FieldLabel}"/>
+
+                                    <ListBox x:Name="DetailsCommentsList" Background="Transparent" BorderThickness="0" MaxHeight="300"
+                                             ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             HorizontalContentAlignment="Stretch" Margin="0,0,0,12">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8" HorizontalAlignment="Left" MaxWidth="450">
-                                                    <StackPanel>
-                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                            <TextBlock FontWeight="SemiBold" Foreground="#2563EB" FontSize="12" Margin="0,0,8,0">
-                            <Run Text="{Binding AuthorName}"/>
-                            <Run Text=" ("/>
-                            <Run Text="{Binding RoleText}"/>
-                            <Run Text=")"/>
-                                                            </TextBlock>
-                                                            <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:dd.MM.yyyy HH:mm}'}" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Content="✕" Width="24" Height="22" Padding="0" VerticalAlignment="Top"
+                                                                Background="Transparent" BorderThickness="0" Foreground="#EF4444" Cursor="Hand"
+                                                                ToolTip="Видалити коментар" Tag="{Binding Id}" Click="DeleteComment_Click"
+                                                                Visibility="{Binding DeleteVisibility}"/>
+                                                        <StackPanel>
+                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12" Margin="0,0,8,0"/>
+                                                                <TextBlock Text="{Binding Time}" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="#334155" FontSize="13"/>
                                                         </StackPanel>
-                                                        <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="#334155" FontSize="13"/>
-                                                    </StackPanel>
+                                                    </DockPanel>
                                                 </Border>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
                                     </ListBox>
 
-                                    <!-- Поле вводу нового коментаря -->
-                                    <Grid>
+                                    <Grid x:Name="DetailsAddCommentPanel">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-
-                                        <TextBox x:Name="TxtNewTaskComment" Height="45" TextWrapping="Wrap" AcceptsReturn="True" 
-                         Padding="8" MaxLength="1000" VerticalScrollBarVisibility="Auto" FontSize="13" Foreground="#0F172A"/>
-
-                                        <Button x:Name="BtnSendTaskComment" Grid.Column="1" Content="Надіслати" Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" Height="45" Click="BtnSendTaskComment_Click"/>
+                                        <TextBox x:Name="NewCommentTextBox" Height="54" TextWrapping="Wrap" AcceptsReturn="True" Padding="8"
+                                                 MaxLength="1000" VerticalScrollBarVisibility="Auto" FontSize="13" Foreground="#0F172A"/>
+                                        <Button x:Name="SendCommentButton" Grid.Column="1" Content="Надіслати" Style="{StaticResource PrimaryButton}"
+                                                Margin="8,0,0,0" VerticalAlignment="Bottom" Click="SendComment_Click"/>
                                     </Grid>
                                 </StackPanel>
                             </Border>

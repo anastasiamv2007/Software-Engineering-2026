@@ -5,7 +5,6 @@ using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Enums;
-using SoftwareEngineering.DAL.Repositories;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -21,12 +20,11 @@ namespace SoftwareEngineering.Client
         private IReadOnlyList<TaskModel> allTasks = new List<TaskModel>();
         private TaskModel? currentSelectedTask;
         private readonly ICategoryService categoryService;
+        private readonly ISubtaskService subtaskService;
+        private readonly ICommentService commentService;
+        private Guid? detailsTaskId;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
-        private readonly CommentService commentService;
-        private readonly ICommentRepository commentRepository;
-        private Guid currentSelectedTaskId;
-        private Guid currentSelectedProjectId;
 
 
         private static readonly string[] CategoryPalette =
@@ -34,15 +32,15 @@ namespace SoftwareEngineering.Client
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, IProjectMemberService projectMemberService, CommentService commentService, ICommentRepository commentRepository)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
             this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
             this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
+            this.subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
             this.commentService = commentService ?? throw new ArgumentNullException(nameof(commentService));
-            this.commentRepository = commentRepository ?? throw new ArgumentNullException(nameof(commentRepository));
 
             BuildCategoryPalette();
             StartCategoryCreateMode();
@@ -370,6 +368,8 @@ namespace SoftwareEngineering.Client
                 try
                 {
                     ShowTaskDetails(await taskService.GetDetailsAsync(selected.Id, CurrentUserId));
+                    await LoadSubtasksAsync();
+                    await LoadCommentsAsync();
                     ShowPage("Details");
                 }
                 catch (ValidationException ex)
@@ -409,11 +409,6 @@ namespace SoftwareEngineering.Client
 
             DetailsDescriptionText.Text = string.IsNullOrWhiteSpace(task.Description) ? "Немає опису" : task.Description;
 
-            DetailsSubtasksText.Text = details.SubtasksTotal == 0
-                ? "Підзадач немає"
-                : $"Підзадачі: виконано {details.SubtasksCompleted} з {details.SubtasksTotal}";
-            DetailsSubtasksProgress.Value = details.SubtasksTotal == 0 ? 0 : details.SubtasksCompleted * 100.0 / details.SubtasksTotal;
-            DetailsCommentsText.Text = $"Коментарів: {details.CommentsCount}";
 
             DetailsMembersList.ItemsSource = details.Members
                 .Select(member => new { member.FullName, member.Email, Role = RoleText(member.Role) })
@@ -439,9 +434,15 @@ namespace SoftwareEngineering.Client
                 : details.CanEdit ? "Редагування (без дедлайну та видалення)" : "Лише перегляд");
 
             DetailsEditButton.IsEnabled = details.CanEdit;
-            currentSelectedTaskId = task.Id;
-            currentSelectedProjectId = task.ProjectId;
-            _ = LoadTaskCommentsAsync(task.Id, task.ProjectId);
+
+            // Ті самі права, що перевіряє SubtaskService: відмічати може і виконавець, видаляти — автор завдання або власник проєкту
+            detailsTaskId = task.Id;
+            var canEditSubtasks = details.CanEdit || task.AssigneeId == CurrentUserId;
+            DetailsSubtasksList.IsEnabled = canEditSubtasks;
+            DetailsAddSubtaskPanel.Visibility = canEditSubtasks ? Visibility.Visible : Visibility.Collapsed;
+            DetailsSubtasksList.Tag = details.CanDeleteOrChangeDeadline ? Visibility.Visible : Visibility.Collapsed;
+            NewSubtaskTitleTextBox.Clear();
+            NewCommentTextBox.Clear();
         }
 
         private void AddInfoRow(string label, string value)
@@ -857,56 +858,192 @@ namespace SoftwareEngineering.Client
                 .FirstOrDefault(item => item.Tag as Guid? == task.AssigneeId) ?? EditAssigneeComboBox.Items[0];
             EditAssigneeComboBox.IsEnabled = true;
         }
-        private async Task LoadTaskCommentsAsync(Guid taskId, Guid projectId)
-        {
-            try
-            {
-                var comments = await commentService.GetTaskCommentsAsync(taskId, projectId);
-                LstTaskComments.ItemsSource = comments;
 
-                if (LstTaskComments.Items.Count > 0)
-                {
-                    LstTaskComments.ScrollIntoView(LstTaskComments.Items[LstTaskComments.Items.Count - 1]);
-                }
-            }
-            catch (Exception ex)
+        // ---------- Коментарі ----------
+        private async Task LoadCommentsAsync()
+        {
+            if (detailsTaskId is not { } taskId)
             {
-                MessageBox.Show($"Не вдалося завантажити коментарі: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var result = await commentService.GetByTaskAsync(taskId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                DetailsCommentsList.ItemsSource = null;
+                DetailsCommentsText.Text = $"Коментарі: {result.Error!.Message}";
+                return;
+            }
+
+            var comments = result.Value!;
+            DetailsCommentsText.Text = comments.Count == 0 ? "Коментарі (поки немає)" : $"Коментарі ({comments.Count})";
+            DetailsCommentsList.ItemsSource = comments
+                .Select(comment => new
+                {
+                    comment.Id,
+                    comment.Content,
+                    Header = comment.AuthorRole.HasValue
+                        ? $"{comment.AuthorName} ({RoleText(comment.AuthorRole.Value)})"
+                        : comment.AuthorName,
+                    // У БД час зберігається в UTC — показуємо місцевий
+                    Time = comment.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                    DeleteVisibility = comment.CanDelete ? Visibility.Visible : Visibility.Collapsed,
+                })
+                .ToList();
+
+            if (DetailsCommentsList.Items.Count > 0)
+            {
+                DetailsCommentsList.ScrollIntoView(DetailsCommentsList.Items[^1]);
             }
         }
 
-        private async void BtnSendTaskComment_Click(object sender, RoutedEventArgs e)
+        private async void SendComment_Click(object sender, RoutedEventArgs e)
         {
-            var content = TxtNewTaskComment.Text;
-            if (string.IsNullOrWhiteSpace(content)) return;
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
 
-            var currentUserId = CurrentUserId;
-
-            BtnSendTaskComment.IsEnabled = false;
-
+            SendCommentButton.IsEnabled = false;
             try
             {
-                var result = await commentService.AddCommentAsync(currentSelectedTaskId, currentUserId, content);
+                var result = await commentService.AddAsync(taskId, NewCommentTextBox.Text, CurrentUserId);
+                if (result.IsFailure)
+                {
+                    MessageBox.Show(result.Error!.Message, "Коментар не надіслано", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
 
-                if (result.IsSuccess)
-                {
-                    TxtNewTaskComment.Text = string.Empty;
-                    await LoadTaskCommentsAsync(currentSelectedTaskId, currentSelectedProjectId);
-                }
-                else
-                {
-                    MessageBox.Show(result.Error?.Message ?? "Помилка валідації", "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Системна помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
+                NewCommentTextBox.Clear();
+                await LoadCommentsAsync();
             }
             finally
             {
-                BtnSendTaskComment.IsEnabled = true;
+                SendCommentButton.IsEnabled = true;
             }
         }
 
+        private async void DeleteComment_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: Guid commentId })
+            {
+                return;
+            }
+
+            var answer = MessageBox.Show("Видалити коментар?", "Підтвердження", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var result = await commentService.DeleteAsync(commentId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Коментар не видалено", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            await LoadCommentsAsync();
+        }
+
+        // ---------- Підзадачі ----------
+        private async Task LoadSubtasksAsync()
+        {
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
+
+            var result = await subtaskService.GetByTaskAsync(taskId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                DetailsSubtasksList.ItemsSource = null;
+                DetailsSubtasksText.Text = result.Error!.Message;
+                DetailsSubtasksProgress.Value = 0;
+                return;
+            }
+
+            ShowSubtasks(result.Value!);
+        }
+
+        private void ShowSubtasks(IReadOnlyList<SubtaskModel> subtasks)
+        {
+            DetailsSubtasksList.ItemsSource = subtasks;
+
+            var completed = subtasks.Count(subtask => subtask.IsCompleted);
+            DetailsSubtasksText.Text = subtasks.Count == 0
+                ? "Підзадач немає"
+                : $"Виконано {completed} з {subtasks.Count}";
+            DetailsSubtasksProgress.Value = subtasks.Count == 0 ? 0 : completed * 100.0 / subtasks.Count;
+        }
+
+        private async void AddSubtask_Click(object sender, RoutedEventArgs e)
+        {
+            await AddSubtaskAsync();
+        }
+
+        private async void NewSubtaskTitleTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                await AddSubtaskAsync();
+            }
+        }
+
+        private async Task AddSubtaskAsync()
+        {
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
+
+            var result = await subtaskService.AddAsync(taskId, NewSubtaskTitleTextBox.Text, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Підзадачу не додано", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            NewSubtaskTitleTextBox.Clear();
+            await LoadSubtasksAsync();
+        }
+
+        private async void SubtaskCheckBox_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not CheckBox { Tag: Guid subtaskId } checkBox)
+            {
+                return;
+            }
+
+            var result = await subtaskService.SetCompletedAsync(subtaskId, checkBox.IsChecked == true, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            // Перечитуємо з БД: і після успіху (прогрес), і після помилки (повертаємо галочку у справжній стан)
+            await LoadSubtasksAsync();
+        }
+
+        private async void DeleteSubtask_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: Guid subtaskId })
+            {
+                return;
+            }
+
+            var answer = MessageBox.Show("Видалити підзадачу?", "Підтвердження", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var result = await subtaskService.DeleteAsync(subtaskId, CurrentUserId);
+            if (result.IsFailure)
+            {
+                MessageBox.Show(result.Error!.Message, "Підзадачу не видалено", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            await LoadSubtasksAsync();
+        }
     }
 }

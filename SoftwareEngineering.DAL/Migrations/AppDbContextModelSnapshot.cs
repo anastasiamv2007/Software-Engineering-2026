@@ -437,7 +437,7 @@ namespace SoftwareEngineering.DAL.Migrations
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_tasks_categories_category_id");
 
-                    b.HasOne("SoftwareEngineering.DAL.Entities.User", null)
+                    b.HasOne("SoftwareEngineering.DAL.Entities.User", "Owner")
                         .WithMany()
                         .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -454,6 +454,8 @@ namespace SoftwareEngineering.DAL.Migrations
                     b.Navigation("Assignee");
 
                     b.Navigation("Category");
+
+                    b.Navigation("Owner");
 
                     b.Navigation("Project");
                 });
