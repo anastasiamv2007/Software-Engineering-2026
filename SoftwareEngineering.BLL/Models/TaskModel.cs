@@ -1,4 +1,5 @@
 ﻿using SoftwareEngineering.DAL.Enums;
+using System.Collections.ObjectModel;
 
 namespace SoftwareEngineering.BLL.Models;
 
@@ -24,6 +25,8 @@ public class TaskModel : BaseModel
     public string? CategoryColorHex { get; set; }
 
     public TaskItemStatus Status { get; set; } = TaskItemStatus.Todo;
+
+    public ObservableCollection<SubtaskModel> Subtasks { get; set; } = new ObservableCollection<SubtaskModel>();
 
     public Guid OwnerId { get; set; }
 }

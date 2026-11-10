@@ -48,6 +48,8 @@ public partial class App : Application
         services.AddSingleton<UserSession>();
         services.AddSingleton<IUserSession>(sp => sp.GetRequiredService<UserSession>());
 
+        
+
         // Реєстрація вікон
         services.AddTransient<LoginWindow>();
         services.AddTransient<MainWindow>();

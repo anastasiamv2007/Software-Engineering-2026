@@ -14,12 +14,14 @@ namespace SoftwareEngineering.Client
 {
     public partial class MainWindow : Window
     {
+        
         private readonly ITaskService taskService;
         private readonly IProjectService projectService;
         private readonly IUserSession userSession;
         private IReadOnlyList<TaskModel> allTasks = new List<TaskModel>();
         private TaskModel? currentSelectedTask;
         private readonly ICategoryService categoryService;
+        private readonly ISubtaskService _subtaskService; //
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
 
@@ -28,13 +30,14 @@ namespace SoftwareEngineering.Client
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
             this.projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
             this.userSession = userSession ?? throw new ArgumentNullException(nameof(userSession));
             this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
+            this._subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
             BuildCategoryPalette();
             StartCategoryCreateMode();
 
@@ -54,6 +57,8 @@ namespace SoftwareEngineering.Client
                 await LoadTasksAsync();
             };
         }
+
+       
 
         private void TasksDataGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
@@ -350,6 +355,7 @@ namespace SoftwareEngineering.Client
         {
             if (TasksDataGrid.SelectedItem is TaskModel selected)
             {
+                currentSelectedTask = selected; //
                 try
                 {
                     ShowTaskDetails(await taskService.GetDetailsAsync(selected.Id, CurrentUserId));
@@ -422,6 +428,9 @@ namespace SoftwareEngineering.Client
                 : details.CanEdit ? "Редагування (без дедлайну та видалення)" : "Лише перегляд");
 
             DetailsEditButton.IsEnabled = details.CanEdit;
+
+            icSubtasks.ItemsSource = currentSelectedTask?.Subtasks;
+            UpdateSubtaskProgress();
         }
 
         private void AddInfoRow(string label, string value)
@@ -797,6 +806,79 @@ namespace SoftwareEngineering.Client
             await ReloadAfterCategoryChangeAsync();
         }
 
+
+
+
+        private void UpdateSubtaskProgress()
+        {
+            if (currentSelectedTask == null || currentSelectedTask.Subtasks == null) return;
+
+            int total = currentSelectedTask.Subtasks.Count;
+            int completed = currentSelectedTask.Subtasks.Count(s => s.IsCompleted);
+
+            txtSubtaskProgress.Text = $"Прогрес: {completed} з {total}";
+            pbSubtaskProgress.Maximum = total == 0 ? 1 : total;
+            pbSubtaskProgress.Value = completed;
+        }
+
+        private async void AddSubtask_Click(object sender, RoutedEventArgs e)
+        {
+            if (currentSelectedTask == null) return;
+
+            string title = txtNewSubtaskTitle.Text;
+            var result = await _subtaskService.AddAsync(currentSelectedTask.Id, title);
+
+            if (result.IsSuccess)
+            {
+                currentSelectedTask.Subtasks.Add(result.Value!);
+                txtNewSubtaskTitle.Clear();
+                UpdateSubtaskProgress();
+            }
+            else
+            {
+                MessageBox.Show(result.Error!.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private async void SubtaskCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox cb && cb.Tag is Guid subtaskId)
+            {
+                bool isNowCompleted = cb.IsChecked ?? false;
+                UpdateSubtaskProgress();
+
+                var result = await _subtaskService.ToggleAsync(subtaskId, !isNowCompleted);
+
+                if (!result.IsSuccess)
+                {
+                    cb.IsChecked = !isNowCompleted;
+                    UpdateSubtaskProgress();
+                    MessageBox.Show(result.Error!.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private async void DeleteSubtask_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is Guid subtaskId)
+            {
+                var result = await _subtaskService.DeleteAsync(subtaskId);
+
+                if (result.IsSuccess)
+                {
+                    var subtaskToRemove = currentSelectedTask?.Subtasks.FirstOrDefault(s => s.Id == subtaskId);
+                    if (subtaskToRemove != null && currentSelectedTask != null)
+                    {
+                        currentSelectedTask.Subtasks.Remove(subtaskToRemove);
+                        UpdateSubtaskProgress();
+                    }
+                }
+                else
+                {
+                    MessageBox.Show(result.Error!.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
 
 
 

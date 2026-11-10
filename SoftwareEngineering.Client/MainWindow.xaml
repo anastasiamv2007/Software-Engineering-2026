@@ -414,6 +414,43 @@
                                     </ItemsControl>
                                 </StackPanel>
                             </Border>
+                            <GroupBox Header="Підзадачі" Margin="0,16,0,0" Padding="10"> 
+                                <StackPanel>
+                                    <!-- Прогрес бар -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <TextBlock x:Name="txtSubtaskProgress" Text="Прогрес: 0 з 0" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                        <ProgressBar x:Name="pbSubtaskProgress" Width="200" Height="15" Minimum="0" Maximum="1" Value="0" Foreground="#4CAF50" />
+                                    </StackPanel>
+
+                                    <!-- Список підзадач -->
+                                    <ItemsControl x:Name="icSubtasks">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,3">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsCompleted, Mode=TwoWay}" VerticalAlignment="Center" Checked="SubtaskCheckBox_Changed" Unchecked="SubtaskCheckBox_Changed" Tag="{Binding Id}"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="8,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                                    <Button Grid.Column="2" Content="❌" Background="Transparent" BorderBrush="Transparent" Cursor="Hand" Click="DeleteSubtask_Click" Tag="{Binding Id}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Поле додавання -->
+                                    <Grid Margin="0,15,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="txtNewSubtaskTitle" Grid.Column="0" Margin="0,0,10,0" Padding="4" MaxLength="200" />
+                                        <Button x:Name="btnAddSubtask" Grid.Column="1" Content="Додати" Style="{StaticResource PrimaryButton}" Padding="15,4" Click="AddSubtask_Click" />
+                                    </Grid>
+                                </StackPanel>
+                            </GroupBox>
                         </StackPanel>
 
                         <!-- Довідкова інформація: заповнюється з коду рядками «назва — значення» -->
