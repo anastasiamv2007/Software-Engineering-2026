@@ -230,6 +230,7 @@
                     <Button DockPanel.Dock="Right" Content="+ Нове завдання" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Click="GoToCreate_Click"/>
                     <Button DockPanel.Dock="Right" Content="Видалити" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="GoToDelete_Click"/>
                     <Button DockPanel.Dock="Right" Content="Оновити прогрес" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="GoToUpdateProgress_Click"/>
+                    <Button DockPanel.Dock="Right" Content="Копіювати" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="CopyTask_Click"/>
                     <Button DockPanel.Dock="Right" Content="Редагувати" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="GoToEdit_Click"/>
                     <Button DockPanel.Dock="Right" Content="Деталі" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="GoToDetails_Click"/>
                     <TextBox x:Name="SearchBox" Height="34" VerticalContentAlignment="Center" Padding="8,0" TextChanged="SearchBox_TextChanged"/>
@@ -507,7 +508,8 @@
 
                     <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                         <Button Content="Назад до списку" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="CancelToTasks_Click"/>
-                        <Button x:Name="DetailsEditButton" Content="Редагувати" Style="{StaticResource PrimaryButton}" Click="GoToEdit_Click"/>
+                        <Button x:Name="DetailsEditButton" Content="Редагувати" Style="{StaticResource PrimaryButton}" Margin="0,0,8,0" Click="GoToEdit_Click"/>
+                        <Button x:Name="DetailsCopyButton" Content="Копіювати" Style="{StaticResource SecondaryButton}" Click="CopyTask_Click"/>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

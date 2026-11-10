@@ -3,6 +3,7 @@ using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.DAL.Entities;
 using SoftwareEngineering.DAL.Enums;
+using SoftwareEngineering.DAL.Exceptions;
 using SoftwareEngineering.DAL.Repositories;
 
 namespace SoftwareEngineering.BLL.Services;
@@ -14,6 +15,9 @@ public class TaskService : BaseService, ITaskService
 {
     private const int MaxTitleLength = 200;
     private const string TaskCodePrefix = "PL-";
+
+    // Скільки разів пробуємо новий код, якщо його одночасно зайняв хтось інший
+    private const int MaxTaskCodeAttempts = 3;
 
     private readonly ITaskRepository taskRepository;
     private readonly IProjectRepository projectRepository;
@@ -113,8 +117,8 @@ public class TaskService : BaseService, ITaskService
                 "Створювати завдання можуть лише власник проєкту та співвиконавці.");
             await this.ValidateCategoryAsync(model.CategoryId);
 
-            var entity = await this.BuildEntityAsync(model);
-            await this.taskRepository.AddAsync(entity);
+            var entity = BuildEntity(model);
+            await this.AddWithUniqueCodeAsync(entity);
 
             return ToModel(entity);
         });
@@ -405,6 +409,113 @@ public class TaskService : BaseService, ITaskService
         return Result.Fail<T>(type, message);
     }
 
+    // Копіювання завдання
+    public async Task<Result<TaskModel>> DuplicateAsync(Guid sourceTaskId, DuplicateTaskModel model, Guid currentUserId)
+    {
+        try
+        {
+            this.Logger.Information(
+                "Спроба скопіювати завдання {SourceTaskId} користувачем {UserId}",
+                sourceTaskId,
+                currentUserId);
+
+            if (sourceTaskId == Guid.Empty || currentUserId == Guid.Empty)
+            {
+                return this.DuplicateFail(ErrorType.Validation, "Не вказано завдання або користувача.");
+            }
+
+            if (model is null)
+            {
+                return this.DuplicateFail(ErrorType.Validation, "Дані для копії не передано.");
+            }
+
+            var title = model.Title?.Trim() ?? string.Empty;
+            if (title.Length == 0)
+            {
+                return this.DuplicateFail(ErrorType.Validation, "Назва копії не може бути порожньою.");
+            }
+
+            if (title.Length > MaxTitleLength)
+            {
+                return this.DuplicateFail(ErrorType.Validation, "Назва занадто довга.");
+            }
+
+            if (!model.Deadline.HasValue)
+            {
+                return this.DuplicateFail(ErrorType.Validation, "Дедлайн не вказано.");
+            }
+
+            var deadline = model.Deadline.Value.ToUniversalTime();
+            if (deadline <= DateTime.UtcNow)
+            {
+                return this.DuplicateFail(ErrorType.Validation, "Дедлайн не може бути в минулому.");
+            }
+
+            // Деталі потрібні заради підзадач; категорію з ON DELETE SET NULL отримуємо вже актуальну
+            var source = await this.taskRepository.GetDetailsAsync(sourceTaskId);
+            if (source is null)
+            {
+                return this.DuplicateFail(ErrorType.NotFound, "Завдання, яке ви копіюєте, не знайдено. Можливо, його вже видалили.");
+            }
+
+            // Права ті самі, що на створення: копія — це нове завдання в тому ж проєкті
+            var role = await this.projectRepository.GetMemberRoleAsync(source.ProjectId, currentUserId);
+            if (role is not (ProjectRole.Owner or ProjectRole.CoExecutor))
+            {
+                return this.DuplicateFail(ErrorType.Forbidden, "Копіювати завдання можуть лише власник проєкту та співвиконавці.");
+            }
+
+            var copy = BuildEntity(new TaskModel
+            {
+                ProjectId = source.ProjectId,
+                OwnerId = currentUserId,
+                Title = title,
+                Description = source.Description,
+                Deadline = deadline,
+                Priority = source.Priority,
+                CategoryId = source.CategoryId,
+            });
+
+            if (model.CopySubtasks)
+            {
+                foreach (var subtask in source.Subtasks)
+                {
+                    copy.Subtasks.Add(new Subtask
+                    {
+                        Id = Guid.NewGuid(),
+                        TaskId = copy.Id,
+                        Title = subtask.Title,
+                        IsCompleted = false,
+                    });
+                }
+            }
+
+            // Завдання і його підзадачі записуються одним SaveChanges — або все, або нічого
+            await this.AddWithUniqueCodeAsync(copy);
+
+            this.Logger.Information(
+                "Користувач {UserId} скопіював завдання {SourceTaskId} → {NewTaskId} ({TaskCode}), підзадач: {SubtaskCount}",
+                currentUserId,
+                sourceTaskId,
+                copy.Id,
+                copy.TaskCode,
+                copy.Subtasks.Count);
+
+            return Result.Ok(ToModel(copy));
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(ex, "Критична помилка під час копіювання завдання {SourceTaskId}", sourceTaskId);
+            return Result.Fail<TaskModel>(ErrorType.Unexpected, "Сталася внутрішня помилка. Спробуйте ще раз.");
+        }
+    }
+
+    private Result<TaskModel> DuplicateFail(ErrorType type, string message)
+    {
+        this.Logger.Warning("Копіювання завдання відхилено ({ErrorType}): {ErrorMessage}", type, message);
+        return Result.Fail<TaskModel>(type, message);
+    }
+
 
     private static bool CanManage(TaskItem task, Guid userId, ProjectRole? role)
     {
@@ -481,17 +592,56 @@ public class TaskService : BaseService, ITaskService
         }
     }
 
-    private async Task<TaskItem> BuildEntityAsync(TaskModel model)
+    /// <summary>
+    /// Наступний код = найбільший наявний номер + 1. Кількість завдань не підходить:
+    /// після видалення (PL-1, PL-3 лишились) вона дала б уже зайнятий PL-3.
+    /// Номери видалених завдань повторно не видаються — як у Jira.
+    /// </summary>
+    public static string NextTaskCode(IEnumerable<string> existingCodes)
     {
-        var tasksInProject = await this.taskRepository.CountByProjectAsync(model.ProjectId);
+        var maxNumber = existingCodes
+            .Where(code => code.StartsWith(TaskCodePrefix, StringComparison.Ordinal))
+            .Select(code => int.TryParse(code.AsSpan(TaskCodePrefix.Length), out var number) ? number : 0)
+            .DefaultIfEmpty(0)
+            .Max();
 
+        return $"{TaskCodePrefix}{maxNumber + 1}";
+    }
+
+    /// <summary>
+    /// Генерує код і зберігає завдання. Якщо код щойно зайняв інший користувач, бере наступний.
+    /// </summary>
+    private async Task AddWithUniqueCodeAsync(TaskItem entity)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            entity.TaskCode = NextTaskCode(await this.taskRepository.GetTaskCodesAsync(entity.ProjectId));
+
+            try
+            {
+                await this.taskRepository.AddAsync(entity);
+                return;
+            }
+            catch (DuplicateTaskCodeException ex) when (attempt < MaxTaskCodeAttempts)
+            {
+                this.Logger.Warning(
+                    "Код {TaskCode} у проєкті {ProjectId} щойно зайняли, пробуємо наступний (спроба {Attempt} з {MaxAttempts})",
+                    ex.TaskCode,
+                    entity.ProjectId,
+                    attempt,
+                    MaxTaskCodeAttempts);
+            }
+        }
+    }
+
+    private static TaskItem BuildEntity(TaskModel model)
+    {
         return new TaskItem
         {
             Id = Guid.NewGuid(),
             ProjectId = model.ProjectId,
             OwnerId = model.OwnerId,
             CreatorId = model.OwnerId,
-            TaskCode = $"{TaskCodePrefix}{tasksInProject + 1}",
             Title = model.Title.Trim(),
             Description = model.Description,
             Deadline = model.Deadline!.Value.ToUniversalTime(),

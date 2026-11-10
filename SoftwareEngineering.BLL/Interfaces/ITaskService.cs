@@ -44,4 +44,10 @@ public interface ITaskService : IService
 
     Task<Result<IReadOnlyList<AssigneeOptionModel>>> GetAssigneeCandidatesAsync(Guid taskId, Guid currentUserId);
 
+    /// <summary>
+    /// Створює копію завдання в тому ж проєкті: новий код, статус «До виконання», власник — поточний користувач.
+    /// Коментарі, виконавець і статус не копіюються; підзадачі — за бажанням і без відміток.
+    /// </summary>
+    Task<Result<TaskModel>> DuplicateAsync(Guid sourceTaskId, DuplicateTaskModel model, Guid currentUserId);
+
 }

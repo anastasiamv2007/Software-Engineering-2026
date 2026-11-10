@@ -4,8 +4,15 @@ namespace SoftwareEngineering.DAL.Repositories;
 
 public interface ITaskRepository
 {
-    Task<int> CountByProjectAsync(Guid projectId);
+    /// <summary>
+    /// Коди всіх наявних завдань проєкту (номери видалених завдань сюди вже не потрапляють).
+    /// </summary>
+    Task<IReadOnlyList<string>> GetTaskCodesAsync(Guid projectId);
 
+    /// <summary>
+    /// Зберігає нове завдання разом з його підзадачами.
+    /// Кидає DuplicateTaskCodeException, якщо код уже зайнятий у проєкті.
+    /// </summary>
     Task AddAsync(TaskItem task);
 
     Task<IEnumerable<TaskItem>> GetAsync();
