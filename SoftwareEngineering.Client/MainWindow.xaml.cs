@@ -387,6 +387,28 @@ namespace SoftwareEngineering.Client
             }
         }
 
+        private async void CopyTask_Click(object sender, RoutedEventArgs e)
+        {
+            if (TasksDataGrid.SelectedItem is not TaskModel selected)
+            {
+                MessageBox.Show("Виберіть завдання, яке потрібно скопіювати.", "Увага", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var dialog = new DuplicateTaskWindow(taskService, selected, CurrentUserId) { Owner = this };
+            if (dialog.ShowDialog() != true || dialog.CreatedTask is not { } copy)
+            {
+                return;
+            }
+
+            MessageBox.Show($"Створено копію {copy.TaskCode} «{copy.Title}».", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            await LoadTasksAsync();
+            ShowPage("Tasks");
+            NavTasks.IsChecked = true;
+            TasksDataGrid.SelectedItem = allTasks.FirstOrDefault(task => task.Id == copy.Id);
+        }
+
         private void ShowTaskDetails(TaskDetailsModel details)
         {
             var task = details.Task;
@@ -434,6 +456,9 @@ namespace SoftwareEngineering.Client
                 : details.CanEdit ? "Редагування (без дедлайну та видалення)" : "Лише перегляд");
 
             DetailsEditButton.IsEnabled = details.CanEdit;
+
+            // Копіювати, як і створювати, можуть лише власник проєкту та співвиконавці
+            DetailsCopyButton.IsEnabled = details.CurrentUserRole is ProjectRole.Owner or ProjectRole.CoExecutor;
 
             // Ті самі права, що перевіряє SubtaskService: відмічати може і виконавець, видаляти — автор завдання або власник проєкту
             detailsTaskId = task.Id;

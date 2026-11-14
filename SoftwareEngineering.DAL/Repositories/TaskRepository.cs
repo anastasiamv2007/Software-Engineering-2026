@@ -1,4 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using SoftwareEngineering.DAL.Exceptions;
 using SoftwareEngineering.DAL.Entities;
 
 namespace SoftwareEngineering.DAL.Repositories;
@@ -12,17 +14,31 @@ public class TaskRepository : ITaskRepository
         this.contextFactory = contextFactory;
     }
 
-    public async Task<int> CountByProjectAsync(Guid projectId)
+    private const string TaskCodeIndexName = "ix_tasks_project_id_task_code";
+
+    public async Task<IReadOnlyList<string>> GetTaskCodesAsync(Guid projectId)
     {
         await using var context = await this.contextFactory.CreateDbContextAsync();
-        return await context.Tasks.CountAsync(task => task.ProjectId == projectId);
+        return await context.Tasks
+            .AsNoTracking()
+            .Where(task => task.ProjectId == projectId)
+            .Select(task => task.TaskCode)
+            .ToListAsync();
     }
 
     public async Task AddAsync(TaskItem task)
     {
         await using var context = await this.contextFactory.CreateDbContextAsync();
         context.Tasks.Add(task);
-        await context.SaveChangesAsync();
+
+        try
+        {
+            await context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: TaskCodeIndexName })
+        {
+            throw new DuplicateTaskCodeException(task.TaskCode, ex);
+        }
     }
 
     public async Task<IEnumerable<TaskItem>> GetAsync()

@@ -22,17 +22,21 @@ public class TaskServiceTests
     {
         // За замовчуванням користувач — співвиконавець проєкту
         this.SetProjectRole(ProjectRole.CoExecutor);
+
+        // За замовчуванням у проєкті ще немає завдань
+        this.repositoryMock
+            .Setup(repository => repository.GetTaskCodesAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(Array.Empty<string>());
     }
 
     [Fact]
-    public async Task CreateAsync_ValidModel_ReturnsCodeBasedOnProjectTaskCount()
+    public async Task CreateAsync_ValidModel_ReturnsCodeAfterHighestExistingNumber()
     {
         // Arrange
-        const int existingTasksCount = 4;
         const string expectedTaskCode = "PL-5";
         this.repositoryMock
-            .Setup(repository => repository.CountByProjectAsync(It.IsAny<Guid>()))
-            .ReturnsAsync(existingTasksCount);
+            .Setup(repository => repository.GetTaskCodesAsync(It.IsAny<Guid>()))
+            .ReturnsAsync(new[] { "PL-1", "PL-2", "PL-3", "PL-4" });
         var service = this.CreateService();
 
         // Act
