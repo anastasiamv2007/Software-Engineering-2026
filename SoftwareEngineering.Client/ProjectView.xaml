@@ -81,6 +81,32 @@
                     </Grid>
                 </StackPanel>
 
+                <!-- СПИСОК УЧАСНИКІВ: ✕ бачить лише Owner -->
+                <StackPanel Grid.Row="4" x:Name="MembersPanel" Margin="0,10,0,10" Visibility="Collapsed">
+                    <TextBlock Text="Учасники проєкту:" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="MembersList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="0,6">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="✕" Width="28" Height="24" Padding="0"
+                                                    Background="Transparent" BorderThickness="0" Foreground="#E74C3C" Cursor="Hand"
+                                                    ToolTip="Видалити учасника" Tag="{Binding UserId}" Click="BtnRemoveMember_Click"
+                                                    Visibility="{Binding RemoveVisibility}"/>
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding Role}" Foreground="#7F8C8D" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding FullName}" FontWeight="SemiBold" Foreground="#2C3E50"/>
+                                                <TextBlock Text="{Binding Email}" FontSize="12" Foreground="#7F8C8D"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+
                 <!-- Кнопки збереження/видалення зміщено на 5-й рядок -->
                 <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="BtnDelete" Content="Видалити" Width="100" Height="36" 
