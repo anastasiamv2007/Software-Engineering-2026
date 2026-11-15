@@ -94,4 +94,87 @@ public class ProjectMemberService : BaseService, IProjectMemberService
         this.Logger.Warning("Додавання співвиконавця відхилено ({ErrorType}): {ErrorMessage}", type, message);
         return Result.Fail(type, message);
     }
+
+    public async Task<Result> TransferOwnershipAsync(Guid projectId, Guid newOwnerId, Guid currentUserId)
+    {
+        try
+        {
+            this.Logger.Information(
+                "Спроба передати власність проєкту {ProjectId} від {OldOwnerId} до {NewOwnerId}",
+                projectId,
+                currentUserId,
+                newOwnerId);
+
+            // 1. Перевірка: чи діє поточний Owner проєкту?
+            var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
+            if (currentRole != ProjectRole.Owner)
+            {
+                return this.Fail(ErrorType.Forbidden, "Тільки власник проєкту може передавати права власності.");
+            }
+
+            // 2. Перевірка: чи не передає він власність самому собі?
+            if (newOwnerId == currentUserId)
+            {
+                return this.Fail(ErrorType.Validation, "Ви не можете передати права власності самому собі.");
+            }
+
+            // 3. Перевірка: чи є новий власник уже учасником проєкту?
+            var targetUserRole = await this.projectRepository.GetMemberRoleAsync(projectId, newOwnerId);
+            if (targetUserRole == null)
+            {
+                return this.Fail(ErrorType.Validation, "Новий власник повинен бути учасником цього проєкту.");
+            }
+
+            // 4. Виконання атомарної транзакції в DAL
+            await this.projectRepository.TransferOwnershipAsync(projectId, newOwnerId);
+
+            // 5. Логування у Seq згідно з вимогами документа №7
+            this.Logger.Information(
+                "Власність проєкту {ProjectId} передано {OldOwnerId} → {NewOwnerId}",
+                projectId,
+                currentUserId,
+                newOwnerId);
+
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(
+                ex,
+                "Критична помилка під час передачі власності проєкту {ProjectId} від {OldOwnerId} до {NewOwnerId}",
+                projectId,
+                currentUserId,
+                newOwnerId);
+            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
+        }
+    }
+    public async Task<Result<IReadOnlyList<ProjectMemberOption>>> GetTransferCandidatesAsync(Guid projectId, Guid currentUserId)
+    {
+        try
+        {
+            var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
+            if (currentRole != ProjectRole.Owner)
+            {
+                return Result.Fail<IReadOnlyList<ProjectMemberOption>>(
+                    ErrorType.Forbidden,
+                    "Тільки власник проєкту може переглядати кандидатів для передачі прав.");
+            }
+
+            var users = await this.projectRepository.GetProjectUsersAsync(projectId);
+            var candidates = users
+                .Where(u => u.Id != currentUserId)
+                .Select(u => new ProjectMemberOption(
+                    u.Id,
+                    string.IsNullOrWhiteSpace(u.FullName) ? u.Email : u.FullName,
+                    u.Email))
+                .ToList();
+
+            return Result.Ok<IReadOnlyList<ProjectMemberOption>>(candidates);
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(ex, "Помилка отримання учасників для передачі власності проєкту {ProjectId}", projectId);
+            return Result.Fail<IReadOnlyList<ProjectMemberOption>>(ErrorType.Unexpected, UnexpectedErrorMessage);
+        }
+    }
 }

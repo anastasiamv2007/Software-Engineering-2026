@@ -21,4 +21,5 @@ public interface IProjectRepository
 
     Task AddMemberAsync(ProjectMember member);
     Task<IReadOnlyList<User>> GetProjectUsersAsync(Guid projectId);
+    Task TransferOwnershipAsync(Guid projectId, Guid newOwnerId);
 }
