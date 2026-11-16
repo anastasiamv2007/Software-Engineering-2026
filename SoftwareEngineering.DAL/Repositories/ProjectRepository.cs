@@ -107,4 +107,53 @@ public class ProjectRepository : IProjectRepository
             .OrderBy(user => user.FullName)
             .ToListAsync();
     }
+
+   
+
+    public async Task<IReadOnlyList<ProjectMember>> GetProjectMembersAsync(Guid projectId)
+    {
+        await using var context = await this.contextFactory.CreateDbContextAsync();
+
+        var result = new List<ProjectMember>();
+
+        var project = await context.Projects
+            .AsNoTracking()
+            .Include(p => p.Owner)
+            .FirstOrDefaultAsync(p => p.Id == projectId);
+
+        if (project?.Owner != null)
+        {
+            result.Add(new ProjectMember
+            {
+                ProjectId = project.Id,
+                UserId = project.Owner.Id,
+                Role = ProjectRole.Owner,
+                User = project.Owner,
+            });
+        }
+
+        var members = await context.ProjectMembers
+            .AsNoTracking()
+            .Include(m => m.User)
+            .Where(m => m.ProjectId == projectId && (project == null || m.UserId != project.OwnerId))
+            .OrderBy(m => m.User.FullName)
+            .ToListAsync();
+
+        result.AddRange(members);
+        return result;
+    }
+
+    public async Task UpdateMemberRoleAsync(Guid projectId, Guid userId, ProjectRole role)
+    {
+        await using var context = await this.contextFactory.CreateDbContextAsync();
+        var member = await context.ProjectMembers
+            .FirstOrDefaultAsync(m => m.ProjectId == projectId && m.UserId == userId);
+
+        if (member != null)
+        {
+            member.Role = role;
+            await context.SaveChangesAsync();
+        }
+    }
+
 }

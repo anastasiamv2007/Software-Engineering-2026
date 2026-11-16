@@ -1,6 +1,7 @@
 ﻿using System.Text.RegularExpressions;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Results;
+using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.DAL.Entities;
 using SoftwareEngineering.DAL.Enums;
 using SoftwareEngineering.DAL.Repositories;
@@ -89,9 +90,86 @@ public class ProjectMemberService : BaseService, IProjectMemberService
         }
     }
 
+    public async Task<IReadOnlyList<ProjectMemberModel>> GetProjectMembersAsync(Guid projectId)
+    {
+        var members = await this.projectRepository.GetProjectMembersAsync(projectId);
+
+        return members
+            .Select(m => new ProjectMemberModel
+            {
+                ProjectId = m.ProjectId,
+                UserId = m.UserId,
+                FullName = m.User?.FullName ?? string.Empty,
+                Email = m.User?.Email ?? string.Empty,
+                Role = m.Role,
+            })
+            .ToList();
+    }
+
+    public async Task<Result> ChangeRoleAsync(Guid projectId, Guid memberId, ProjectRole newRole, Guid currentUserId)
+    {
+        try
+        {
+            // 1. Перевірка: діє Owner
+            var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
+            if (currentRole != ProjectRole.Owner)
+            {
+                return this.Fail(ErrorType.Forbidden, "Тільки власник проєкту може змінювати ролі учасників.");
+            }
+
+            // 2. Перевірка: змінювати свою роль не можна
+            if (memberId == currentUserId)
+            {
+                return this.Fail(ErrorType.Validation, "Ви не можете змінювати власну роль.");
+            }
+
+            // 3. Перевірка: нова роль лише CoExecutor або Reviewer (Owner передається лише через UC-3)
+            if (newRole != ProjectRole.CoExecutor && newRole != ProjectRole.Reviewer)
+            {
+                return this.Fail(ErrorType.Validation, "Нова роль може бути лише Співвиконавець або Читач.");
+            }
+
+            // Отримуємо поточну роль учасника
+            var oldRole = await this.projectRepository.GetMemberRoleAsync(projectId, memberId);
+            if (oldRole == null)
+            {
+                return this.Fail(ErrorType.NotFound, "Учасника не знайдено у цьому проєкті.");
+            }
+
+            if (oldRole == ProjectRole.Owner)
+            {
+                return this.Fail(ErrorType.Validation, "Неможливо змінити роль власника проєкту.");
+            }
+
+            // 4. Якщо роль та сама — базу не змінюємо
+            if (oldRole == newRole)
+            {
+                return Result.Ok();
+            }
+
+            await this.projectRepository.UpdateMemberRoleAsync(projectId, memberId, newRole);
+
+            this.Logger.Information(
+                "Роль {MemberId} у проєкті {ProjectId} змінено {OldRole} → {NewRole}",
+                memberId,
+                projectId,
+                oldRole.Value,
+                newRole);
+
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(ex, "Критична помилка під час зміни ролі учасника {MemberId} у проєкті {ProjectId}", memberId, projectId);
+            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
+        }
+    }
+
     private Result Fail(ErrorType type, string message)
     {
         this.Logger.Warning("Додавання співвиконавця відхилено ({ErrorType}): {ErrorMessage}", type, message);
         return Result.Fail(type, message);
     }
+
+
 }
