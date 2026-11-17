@@ -16,6 +16,7 @@ public interface IProjectRepository
     /// </summary>
     Task<ProjectRole?> GetMemberRoleAsync(Guid projectId, Guid userId);
 
+    Task UpdateMemberRoleAsync(Guid projectId, Guid userId, ProjectRole role);
     Task UpdateAsync(Project project);
     Task DeleteAsync(Guid id);
 

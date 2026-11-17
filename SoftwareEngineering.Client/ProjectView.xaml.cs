@@ -196,7 +196,7 @@ public partial class ProjectsView : UserControl
     {
         ProjectRole.Owner => "Власник",
         ProjectRole.CoExecutor => "Співвиконавець",
-        ProjectRole.Reviewer => "Рецензент",
+        ProjectRole.Reviewer => "Читач",
         _ => role.ToString(),
     };
 
@@ -218,15 +218,47 @@ public partial class ProjectsView : UserControl
         }
 
         MembersList.ItemsSource = result.Value!
-            .Select(member => new
+            .Select(member =>
             {
-                member.UserId,
-                member.FullName,
-                member.Email,
-                Role = RoleText(member.Role),
-                RemoveVisibility = isOwner && member.Role != ProjectRole.Owner ? Visibility.Visible : Visibility.Collapsed,
+                // Власника не видаляють і не змінюють йому роль — для цього є «Передати власність»
+                var canManage = isOwner && member.Role != ProjectRole.Owner;
+                return new MemberRow
+                {
+                    UserId = member.UserId,
+                    FullName = member.FullName,
+                    Email = member.Email,
+                    Role = member.Role,
+                    RemoveVisibility = canManage ? Visibility.Visible : Visibility.Collapsed,
+                    RoleComboVisibility = canManage ? Visibility.Visible : Visibility.Collapsed,
+                    RoleTextVisibility = canManage ? Visibility.Collapsed : Visibility.Visible,
+                };
             })
             .ToList();
+    }
+
+    private async void CmbMemberRole_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // SelectionChanged спрацьовує і під час побудови списку — реагуємо лише на справжню зміну
+        if (_selectedProject == null
+            || sender is not ComboBox { DataContext: MemberRow row, SelectedValue: ProjectRole newRole } comboBox
+            || newRole == row.Role)
+        {
+            return;
+        }
+
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+        var result = await _projectMemberService.ChangeRoleAsync(_selectedProject.Id, row.UserId, newRole, currentUserId);
+
+        if (result.IsSuccess)
+        {
+            row.Role = newRole;
+            return;
+        }
+
+        MessageBox.Show(result.Error?.Message ?? "Не вдалося змінити роль.", "Роль не змінено", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+        // Повертаємо попереднє значення (повторний SelectionChanged відсіється перевіркою newRole == row.Role)
+        comboBox.SelectedValue = row.Role;
     }
 
     private async void BtnRemoveMember_Click(object sender, RoutedEventArgs e)
@@ -307,5 +339,37 @@ public partial class ProjectsView : UserControl
                 LstProjects.SelectedItem = updatedProject;
             }
         }
+    }
+
+    private sealed record RoleOption(ProjectRole Role, string Title);
+
+    /// <summary>
+    /// Рядок списку учасників: роль можна змінити у випадаючому списку (лише Owner).
+    /// </summary>
+    private sealed class MemberRow
+    {
+        public static IReadOnlyList<RoleOption> AssignableRoles { get; } = new[]
+        {
+            new RoleOption(ProjectRole.CoExecutor, RoleText(ProjectRole.CoExecutor)),
+            new RoleOption(ProjectRole.Reviewer, RoleText(ProjectRole.Reviewer)),
+        };
+
+        public Guid UserId { get; init; }
+
+        public string FullName { get; init; } = string.Empty;
+
+        public string Email { get; init; } = string.Empty;
+
+        public ProjectRole Role { get; set; }
+
+        public string RoleTitle => RoleText(this.Role);
+
+        public IReadOnlyList<RoleOption> RoleOptions => AssignableRoles;
+
+        public Visibility RemoveVisibility { get; init; }
+
+        public Visibility RoleComboVisibility { get; init; }
+
+        public Visibility RoleTextVisibility { get; init; }
     }
 }

@@ -159,6 +159,19 @@ public class ProjectRepository : IProjectRepository
         return tasks.Count;
     }
 
+    public async Task UpdateMemberRoleAsync(Guid projectId, Guid userId, ProjectRole role)
+    {
+        await using var context = await this.contextFactory.CreateDbContextAsync();
+        var member = await context.ProjectMembers
+            .FirstOrDefaultAsync(m => m.ProjectId == projectId && m.UserId == userId);
+
+        if (member != null)
+        {
+            member.Role = role;
+            await context.SaveChangesAsync();
+        }
+    }
+
     public async Task TransferOwnershipAsync(Guid projectId, Guid newOwnerId)
     {
         await using var context = await this.contextFactory.CreateDbContextAsync();

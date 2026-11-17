@@ -217,6 +217,71 @@ public class ProjectMemberService : BaseService, IProjectMemberService
         return Result.Fail(type, message);
     }
 
+    public async Task<Result> ChangeRoleAsync(Guid projectId, Guid memberId, ProjectRole newRole, Guid currentUserId)
+    {
+        try
+        {
+            this.Logger.Information(
+                "Спроба змінити роль учасника {MemberId} у проєкті {ProjectId} на {NewRole} користувачем {UserId}",
+                memberId,
+                projectId,
+                newRole,
+                currentUserId);
+
+            // 1. Діє Owner
+            var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
+            if (currentRole != ProjectRole.Owner)
+            {
+                return this.FailWith(ErrorType.Forbidden, "Тільки власник проєкту може змінювати ролі учасників.");
+            }
+
+            // 2. Свою роль змінювати не можна
+            if (memberId == currentUserId)
+            {
+                return this.FailWith(ErrorType.Validation, "Ви не можете змінювати власну роль.");
+            }
+
+            // 3. Owner передається лише через «Передати власність»
+            if (newRole is not (ProjectRole.CoExecutor or ProjectRole.Reviewer))
+            {
+                return this.FailWith(ErrorType.Validation, "Нова роль може бути лише Співвиконавець або Читач.");
+            }
+
+            var oldRole = await this.projectRepository.GetMemberRoleAsync(projectId, memberId);
+            if (oldRole is null)
+            {
+                return this.FailWith(ErrorType.NotFound, "Учасника не знайдено у цьому проєкті.");
+            }
+
+            if (oldRole == ProjectRole.Owner)
+            {
+                return this.FailWith(ErrorType.Validation, "Неможливо змінити роль власника проєкту.");
+            }
+
+            // 4. Роль та сама — базу не змінюємо
+            if (oldRole == newRole)
+            {
+                return Result.Ok();
+            }
+
+            await this.projectRepository.UpdateMemberRoleAsync(projectId, memberId, newRole);
+
+            this.Logger.Information(
+                "Роль {MemberId} у проєкті {ProjectId} змінено {OldRole} → {NewRole}",
+                memberId,
+                projectId,
+                oldRole.Value,
+                newRole);
+
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(ex, "Критична помилка під час зміни ролі учасника {MemberId} у проєкті {ProjectId}", memberId, projectId);
+            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
+        }
+    }
+
     public async Task<Result> TransferOwnershipAsync(Guid projectId, Guid newOwnerId, Guid currentUserId)
     {
         try

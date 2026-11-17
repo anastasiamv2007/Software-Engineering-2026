@@ -1,5 +1,6 @@
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
+using SoftwareEngineering.DAL.Enums;
 
 namespace SoftwareEngineering.BLL.Interfaces;
 
@@ -11,6 +12,11 @@ public interface IProjectMemberService : IService
     Task<Result> AddCoExecutorAsync(Guid projectId, string email, Guid currentUserId);
     Task<Result<IReadOnlyList<ProjectMemberModel>>> GetMembersAsync(Guid projectId, Guid currentUserId);
     Task<Result> RemoveMemberAsync(Guid projectId, Guid memberId, Guid currentUserId);
+
+    /// <summary>
+    /// Змінює роль учасника між CoExecutor та Reviewer (Читач). Змінювати роль може лише Owner проєкту.
+    /// </summary>
+    Task<Result> ChangeRoleAsync(Guid projectId, Guid memberId, ProjectRole newRole, Guid currentUserId);
 
     /// <summary>
     /// Передає власність іншому учаснику; колишній власник стає співвиконавцем. Лише для Owner.

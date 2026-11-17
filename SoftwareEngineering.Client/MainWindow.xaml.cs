@@ -519,7 +519,7 @@ namespace SoftwareEngineering.Client
         {
             ProjectRole.Owner => "Власник",
             ProjectRole.CoExecutor => "Співвиконавець",
-            ProjectRole.Reviewer => "Рецензент",
+            ProjectRole.Reviewer => "Читач",
             _ => role.ToString(),
         };
 

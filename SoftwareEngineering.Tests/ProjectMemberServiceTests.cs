@@ -312,4 +312,154 @@ public class ProjectMemberServiceTests
         Assert.Contains(result.Value, c => c.UserId == member1Id && c.FullName == "Member One");
         Assert.Contains(result.Value, c => c.UserId == member2Id && c.FullName == "m2@planora.com");
     }
+
+    [Fact]
+    public async Task ChangeRoleAsync_WhenCallerIsNotOwner_ReturnsForbiddenResult()
+    {
+        // Arrange
+        var projectId = Guid.NewGuid();
+        var currentUserId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, currentUserId))
+            .ReturnsAsync(ProjectRole.CoExecutor);
+
+        // Act
+        var result = await _service.ChangeRoleAsync(projectId, memberId, ProjectRole.Reviewer, currentUserId);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Forbidden, result.Error!.Type);
+        _projectRepoMock.Verify(
+            repo => repo.UpdateMemberRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ProjectRole>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangeRoleAsync_WhenChangingOwnRole_ReturnsValidationResult()
+    {
+        // Arrange
+        var projectId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, ownerId))
+            .ReturnsAsync(ProjectRole.Owner);
+
+        // Act
+        var result = await _service.ChangeRoleAsync(projectId, ownerId, ProjectRole.Reviewer, ownerId);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+        _projectRepoMock.Verify(
+            repo => repo.UpdateMemberRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ProjectRole>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangeRoleAsync_WhenNewRoleIsOwner_ReturnsValidationResult()
+    {
+        // Arrange
+        var projectId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, ownerId))
+            .ReturnsAsync(ProjectRole.Owner);
+
+        // Act
+        var result = await _service.ChangeRoleAsync(projectId, memberId, ProjectRole.Owner, ownerId);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+        _projectRepoMock.Verify(
+            repo => repo.UpdateMemberRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ProjectRole>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangeRoleAsync_WhenMemberNotFound_ReturnsNotFoundResult()
+    {
+        // Arrange
+        var projectId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, ownerId))
+            .ReturnsAsync(ProjectRole.Owner);
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, memberId))
+            .ReturnsAsync((ProjectRole?)null);
+
+        // Act
+        var result = await _service.ChangeRoleAsync(projectId, memberId, ProjectRole.Reviewer, ownerId);
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.NotFound, result.Error!.Type);
+        _projectRepoMock.Verify(
+            repo => repo.UpdateMemberRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ProjectRole>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangeRoleAsync_WhenRoleIsUnchanged_ReturnsOkWithoutUpdatingDatabase()
+    {
+        // Arrange
+        var projectId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, ownerId))
+            .ReturnsAsync(ProjectRole.Owner);
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, memberId))
+            .ReturnsAsync(ProjectRole.CoExecutor);
+
+        // Act
+        var result = await _service.ChangeRoleAsync(projectId, memberId, ProjectRole.CoExecutor, ownerId);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        _projectRepoMock.Verify(
+            repo => repo.UpdateMemberRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<ProjectRole>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ChangeRoleAsync_WhenAllConditionsMet_UpdatesRoleAndReturnsSuccess()
+    {
+        // Arrange
+        var projectId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var memberId = Guid.NewGuid();
+
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, ownerId))
+            .ReturnsAsync(ProjectRole.Owner);
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, memberId))
+            .ReturnsAsync(ProjectRole.CoExecutor);
+
+        // Act
+        var result = await _service.ChangeRoleAsync(projectId, memberId, ProjectRole.Reviewer, ownerId);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        _projectRepoMock.Verify(
+            repo => repo.UpdateMemberRoleAsync(projectId, memberId, ProjectRole.Reviewer),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ChangeRoleAsync_WhenRepositoryThrows_ReturnsUnexpectedResult()
+    {
+        // Arrange
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .ThrowsAsync(new InvalidOperationException("DB error"));
+
+        // Act
+        var result = await _service.ChangeRoleAsync(Guid.NewGuid(), Guid.NewGuid(), ProjectRole.Reviewer, Guid.NewGuid());
+
+        // Assert
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
+    }
 }
