@@ -1,11 +1,9 @@
-﻿using System;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using SoftwareEngineering.BLL.Interfaces;
+﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Services;
+using SoftwareEngineering.DAL.Enums;
+using System.Windows;
+using System.Windows.Controls;
 
 namespace SoftwareEngineering.Client;
 
@@ -82,6 +80,8 @@ public partial class ProjectsView : UserControl
             BtnDelete.Visibility = ownerOnly;
             CoExecutorPanel.Visibility = ownerOnly;
             TxtCoExecutorEmail.Text = string.Empty;
+            MembersPanel.Visibility = Visibility.Visible;
+            _ = LoadMembersAsync(selected.Id, isOwner);
 
             DetailsPanel.Visibility = Visibility.Visible;
         }
@@ -105,6 +105,8 @@ public partial class ProjectsView : UserControl
 
         // Співвиконавців можна додати лише до вже створеного проєкту
         CoExecutorPanel.Visibility = Visibility.Collapsed;
+
+        MembersPanel.Visibility = Visibility.Collapsed;
 
         DetailsPanel.Visibility = Visibility.Visible;
         TxtProjectName.Focus();
@@ -182,11 +184,78 @@ public partial class ProjectsView : UserControl
         {
             MessageBox.Show($"Користувача {email} успішно додано до проєкту!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
             TxtCoExecutorEmail.Text = string.Empty;
+            await LoadMembersAsync(_selectedProject.Id, true);
         }
         else
         {
             MessageBox.Show(result.Error?.Message ?? "Невідома помилка", "Помилка додавання", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private static string RoleText(ProjectRole role) => role switch
+    {
+        ProjectRole.Owner => "Власник",
+        ProjectRole.CoExecutor => "Співвиконавець",
+        ProjectRole.Reviewer => "Рецензент",
+        _ => role.ToString(),
+    };
+
+    private async Task LoadMembersAsync(Guid projectId, bool isOwner)
+    {
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+        var result = await _projectMemberService.GetMembersAsync(projectId, currentUserId);
+
+        // Користувач міг вибрати інший проєкт, поки йшов запит
+        if (_selectedProject?.Id != projectId)
+        {
+            return;
+        }
+
+        if (result.IsFailure)
+        {
+            MembersList.ItemsSource = null;
+            return;
+        }
+
+        MembersList.ItemsSource = result.Value!
+            .Select(member => new
+            {
+                member.UserId,
+                member.FullName,
+                member.Email,
+                Role = RoleText(member.Role),
+                RemoveVisibility = isOwner && member.Role != ProjectRole.Owner ? Visibility.Visible : Visibility.Collapsed,
+            })
+            .ToList();
+    }
+
+    private async void BtnRemoveMember_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedProject == null || sender is not Button { Tag: Guid memberId })
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            "Видалити учасника з проєкту?\nЙого задачі перейдуть до власника проєкту, а виконавця в задачах буде знято.",
+            "Підтвердження",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+        var result = await _projectMemberService.RemoveMemberAsync(_selectedProject.Id, memberId, currentUserId);
+
+        if (result.IsFailure)
+        {
+            MessageBox.Show(result.Error?.Message ?? "Невідома помилка", "Учасника не видалено", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        await LoadMembersAsync(_selectedProject.Id, true);
     }
 
     private async void BtnTransferOwnership_Click(object sender, RoutedEventArgs e)

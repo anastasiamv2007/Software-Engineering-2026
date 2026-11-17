@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using SoftwareEngineering.BLL.Interfaces;
+using SoftwareEngineering.BLL.Models;
 
 namespace SoftwareEngineering.Client;
 
@@ -19,7 +20,7 @@ public partial class TransferOwnershipWindow : Window
         Guid projectId,
         string projectName,
         Guid currentUserId,
-        IReadOnlyList<ProjectMemberOption> candidates)
+        IReadOnlyList<ProjectMemberModel> candidates)
     {
         InitializeComponent();
 
@@ -52,7 +53,7 @@ public partial class TransferOwnershipWindow : Window
 
     private async void BtnConfirm_Click(object sender, RoutedEventArgs e)
     {
-        if (CmbNewOwner.SelectedItem is not ComboBoxItem { Tag: ProjectMemberOption selectedMember })
+        if (CmbNewOwner.SelectedItem is not ComboBoxItem { Tag: ProjectMemberModel selectedMember })
         {
             MessageBox.Show("Оберіть учасника зі списку.", "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;

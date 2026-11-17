@@ -294,12 +294,12 @@ public class ProjectMemberServiceTests
 
         _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, ownerId))
             .ReturnsAsync(ProjectRole.Owner);
-        _projectRepoMock.Setup(repo => repo.GetProjectUsersAsync(projectId))
-            .ReturnsAsync(new List<User>
+        _projectRepoMock.Setup(repo => repo.GetMembersAsync(projectId))
+            .ReturnsAsync(new List<ProjectMember>
             {
-                new() { Id = ownerId, FullName = "Owner User", Email = "owner@planora.com" },
-                new() { Id = member1Id, FullName = "Member One", Email = "m1@planora.com" },
-                new() { Id = member2Id, FullName = "", Email = "m2@planora.com" },
+                new() { UserId = ownerId, Role = ProjectRole.Owner, User = new User { Id = ownerId, FullName = "Owner User", Email = "owner@planora.com" } },
+                new() { UserId = member1Id, Role = ProjectRole.CoExecutor, User = new User { Id = member1Id, FullName = "Member One", Email = "m1@planora.com" } },
+                new() { UserId = member2Id, Role = ProjectRole.Reviewer, User = new User { Id = member2Id, FullName = "", Email = "m2@planora.com" } },
             });
 
         // Act
