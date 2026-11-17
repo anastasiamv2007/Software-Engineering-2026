@@ -107,4 +107,55 @@ public class ProjectRepository : IProjectRepository
             .OrderBy(user => user.FullName)
             .ToListAsync();
     }
+    public async Task<IReadOnlyList<ProjectMember>> GetMembersAsync(Guid projectId)
+    {
+        await using var context = await this.contextFactory.CreateDbContextAsync();
+        return await context.ProjectMembers
+            .AsNoTracking()
+            .Include(member => member.User)
+            .Where(member => member.ProjectId == projectId)
+            .OrderBy(member => member.User.FullName)
+            .ToListAsync();
+    }
+
+    public async Task<int> RemoveMemberAsync(Guid projectId, Guid userId)
+    {
+        await using var context = await this.contextFactory.CreateDbContextAsync();
+
+        var projectOwnerId = await context.Projects
+            .Where(project => project.Id == projectId)
+            .Select(project => project.OwnerId)
+            .FirstAsync();
+
+        var member = await context.ProjectMembers
+            .FirstOrDefaultAsync(m => m.ProjectId == projectId && m.UserId == userId);
+
+        var tasks = await context.Tasks
+            .Where(task => task.ProjectId == projectId && (task.AssigneeId == userId || task.OwnerId == userId))
+            .ToListAsync();
+
+        foreach (var task in tasks)
+        {
+            if (task.AssigneeId == userId)
+            {
+                task.AssigneeId = null;
+            }
+
+            // Без цього колишній учасник міг би видалити свою задачу за id (CanManage перевіряє OwnerId)
+            if (task.OwnerId == userId)
+            {
+                task.OwnerId = projectOwnerId;
+            }
+        }
+
+        if (member != null)
+        {
+            context.ProjectMembers.Remove(member);
+        }
+
+        // Один SaveChanges = одна транзакція: або все, або нічого
+        await context.SaveChangesAsync();
+
+        return tasks.Count;
+    }
 }
