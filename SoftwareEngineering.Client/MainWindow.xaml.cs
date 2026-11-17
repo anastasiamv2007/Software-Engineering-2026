@@ -174,15 +174,21 @@ namespace SoftwareEngineering.Client
                 Priority = GetSelectedEnum<TaskPriority>(FilterPriorityComboBox),
                 CategoryId = GetSelectedCategoryId(FilterCategoryComboBox),
                 OnlyOverdue = FilterOverdueCheckBox.IsChecked ?? false,
+                DeadlineFrom = FilterDeadlineFromPicker.SelectedDate,
+                DeadlineTo = FilterDeadlineToPicker.SelectedDate,
                 SortBy = GetSelectedEnum<TaskSortOption>(SortComboBox) ?? TaskSortOption.ByDeadlineAsc,
             };
 
             var filterResult = TaskFilter.Apply(allTasks, criteria);
             if (filterResult.IsFailure)
             {
-                Log.Warning("Помилка фільтрації задач: {Error}", filterResult.Error!.Message);
+                // Помилку видно під панеллю фільтрів, а не у вікні: фільтр змінюють часто, MessageBox заважав би
+                FilterErrorText.Text = filterResult.Error!.Message;
+                FilterErrorText.Visibility = Visibility.Visible;
                 return;
             }
+
+            FilterErrorText.Visibility = Visibility.Collapsed;
 
             IReadOnlyList<TaskModel> filteredList = filterResult.Value!;
 
@@ -275,6 +281,8 @@ namespace SoftwareEngineering.Client
             FilterCategoryComboBox.SelectedIndex = 0;
             SortComboBox.SelectedIndex = 0;
             FilterOverdueCheckBox.IsChecked = false;
+            FilterDeadlineFromPicker.SelectedDate = null;
+            FilterDeadlineToPicker.SelectedDate = null;
             SearchBox.Text = string.Empty;
 
             ApplyFilter();

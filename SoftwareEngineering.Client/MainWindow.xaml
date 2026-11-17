@@ -236,8 +236,9 @@
                     <TextBox x:Name="SearchBox" Height="34" VerticalContentAlignment="Center" Padding="8,0" TextChanged="SearchBox_TextChanged"/>
                 </DockPanel>
 
-                <!-- ПАНЕЛЬ ФІЛЬТРІВ ТА СОРТУВАННЯ -->
-                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,16">
+                <!-- ПАНЕЛЬ ФІЛЬТРІВ ТА СОРТУВАННЯ (WrapPanel переносить фільтри на вузькому вікні) -->
+                <StackPanel Grid.Row="2" Margin="0,0,0,16">
+                <WrapPanel Orientation="Horizontal">
 
                     <!-- Фільтр за статусом -->
                     <StackPanel Margin="0,0,16,0">
@@ -278,7 +279,19 @@
                             <ComboBoxItem Content="Дедлайном (найближчі)" Tag="ByDeadlineAsc" IsSelected="True"/>
                             <ComboBoxItem Content="Пріоритетом (високий → низький)" Tag="ByPriorityDesc"/>
                             <ComboBoxItem Content="Назвою (А-Я)" Tag="ByTitleAsc"/>
+                            <ComboBoxItem Content="Статусом (до виконання → виконано)" Tag="ByStatus"/>
                         </ComboBox>
+                    </StackPanel>
+
+                    <!-- Період за дедлайном: можна задати одну або обидві межі -->
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="Дедлайн з:" Style="{StaticResource FieldLabel}"/>
+                        <DatePicker x:Name="FilterDeadlineFromPicker" Width="130" Height="32" SelectedDateChanged="OnFilterChanged"/>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,16,0">
+                        <TextBlock Text="по:" Style="{StaticResource FieldLabel}"/>
+                        <DatePicker x:Name="FilterDeadlineToPicker" Width="130" Height="32" SelectedDateChanged="OnFilterChanged"/>
                     </StackPanel>
 
                     <!-- Тільки прострочені -->
@@ -288,6 +301,10 @@
 
                     <!-- Кнопка скидання -->
                     <Button Content="Скинути" Style="{StaticResource SecondaryButton}" Height="32" Padding="16,0" VerticalAlignment="Bottom" Click="OnClearFiltersClicked"/>
+                </WrapPanel>
+
+                <!-- Помилка фільтра (наприклад, «з» пізніше за «по»); список тоді лишається попереднім -->
+                <TextBlock x:Name="FilterErrorText" Foreground="#DC2626" FontSize="12" Margin="0,6,0,0" Visibility="Collapsed"/>
                 </StackPanel>
 
                 <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
