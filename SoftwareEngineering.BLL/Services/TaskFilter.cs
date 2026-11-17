@@ -10,6 +10,16 @@ namespace SoftwareEngineering.BLL.Services;
 /// </summary>
 public static class TaskFilter
 {
+    // Порядок груп за ходом роботи; значення enum стоять інакше (Done раніше за NeedsRevision)
+    private static readonly TaskItemStatus[] StatusOrder =
+    {
+        TaskItemStatus.Todo,
+        TaskItemStatus.InProgress,
+        TaskItemStatus.NeedsRevision,
+        TaskItemStatus.InReview,
+        TaskItemStatus.Done,
+    };
+
     public static Result<IReadOnlyList<TaskModel>> Apply(IEnumerable<TaskModel> tasks, TaskFilterCriteria criteria)
     {
         if (tasks == null)
@@ -22,6 +32,13 @@ public static class TaskFilter
         {
             Log.Warning("TaskFilter.Apply отримав нульові критерії фільтрації");
             return Result.Fail<IReadOnlyList<TaskModel>>(ErrorType.Validation, "Критерії фільтрації не можуть бути null.");
+        }
+
+        if (criteria.DeadlineFrom.HasValue && criteria.DeadlineTo.HasValue &&
+            criteria.DeadlineFrom.Value.Date > criteria.DeadlineTo.Value.Date)
+        {
+            Log.Debug("Період фільтра задано навпаки: {From} > {To}", criteria.DeadlineFrom, criteria.DeadlineTo);
+            return Result.Fail<IReadOnlyList<TaskModel>>(ErrorType.Validation, "Дата «з» не може бути пізнішою за дату «по».");
         }
 
         try
@@ -53,12 +70,32 @@ public static class TaskFilter
                                          t.Deadline.Value.ToUniversalTime() < now);
             }
 
+            // Період порівнюємо за місцевою датою дедлайну: задача на 20.11 23:30 належить до 20.11, а не до 21.11 за UTC.
+            // Завдання без дедлайну в жоден період не потрапляють
+            if (criteria.DeadlineFrom.HasValue)
+            {
+                var from = criteria.DeadlineFrom.Value.Date;
+                query = query.Where(t => t.Deadline.HasValue && t.Deadline.Value.ToLocalTime().Date >= from);
+            }
+
+            if (criteria.DeadlineTo.HasValue)
+            {
+                var to = criteria.DeadlineTo.Value.Date;
+                query = query.Where(t => t.Deadline.HasValue && t.Deadline.Value.ToLocalTime().Date <= to);
+            }
+
             query = criteria.SortBy switch
             {
                 TaskSortOption.ByTitleAsc => query.OrderBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase),
 
                 // У enum TaskPriority High = 0, Low = 2, тому High → Low — це сортування за зростанням
                 TaskSortOption.ByPriorityDesc => query.OrderBy(t => t.Priority),
+
+                // Групи за ходом роботи, усередині групи — найближчий дедлайн першим
+                TaskSortOption.ByStatus => query
+                    .OrderBy(t => StatusRank(t.Status))
+                    .ThenBy(t => t.Deadline.HasValue ? 0 : 1)
+                    .ThenBy(t => t.Deadline),
 
                 // Завдання без дедлайну завжди йдуть у кінець
                 _ => query.OrderBy(t => t.Deadline.HasValue ? 0 : 1).ThenBy(t => t.Deadline),
@@ -76,5 +113,12 @@ public static class TaskFilter
             Log.Error(ex, "Помилка під час виконання TaskFilter.Apply");
             return Result.Fail<IReadOnlyList<TaskModel>>(ErrorType.Unexpected, "Не вдалося застосувати фільтр. Спробуйте ще раз.");
         }
+    }
+
+    // Невідомий (новий) статус іде в кінець, а не ламає сортування
+    private static int StatusRank(TaskItemStatus status)
+    {
+        var index = Array.IndexOf(StatusOrder, status);
+        return index >= 0 ? index : StatusOrder.Length;
     }
 }
