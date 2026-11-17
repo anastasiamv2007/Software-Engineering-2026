@@ -45,6 +45,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <!-- Рядок для співвиконавця -->
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
@@ -65,7 +66,7 @@
                     <TextBlock x:Name="TxtCreatedAt" Text="-" FontWeight="Bold" Foreground="#2C3E50" Margin="5,0,0,0"/>
                 </StackPanel>
 
-                <!-- ПАНЕЛЬ ДОДАВАННЯ СПІВВИКОНАВЦЯ -->
+                <!-- НОВА ПАНЕЛЬ ДЛЯ СПІВВИКОНАВЦЯ -->
                 <StackPanel Grid.Row="3" x:Name="CoExecutorPanel" Margin="0,10,0,0" Visibility="Collapsed">
                     <TextBlock Text="Додати співвиконавця (Email):" FontWeight="SemiBold" Margin="0,0,0,5"/>
                     <Grid>
@@ -80,62 +81,44 @@
                     </Grid>
                 </StackPanel>
 
-                <!-- СПИСОК УЧАСНИКІВ ПРОЄКТУ ТА ЗМІНА РОЛІ -->
-                <Grid Grid.Row="4" x:Name="MembersPanel" Margin="0,20,0,15">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+                <!-- СПИСОК УЧАСНИКІВ: ✕ бачить лише Owner -->
+                <StackPanel Grid.Row="4" x:Name="MembersPanel" Margin="0,10,0,10" Visibility="Collapsed">
+                    <TextBlock Text="Учасники проєкту:" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="MembersList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="0,6">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Content="✕" Width="28" Height="24" Padding="0"
+                                                    Background="Transparent" BorderThickness="0" Foreground="#E74C3C" Cursor="Hand"
+                                                    ToolTip="Видалити учасника" Tag="{Binding UserId}" Click="BtnRemoveMember_Click"
+                                                    Visibility="{Binding RemoveVisibility}"/>
+                                            <!-- Роль: Owner змінює її у списку (крім себе), решта бачить лише підпис -->
+                                            <ComboBox DockPanel.Dock="Right" Width="150" Height="28" Margin="0,0,12,0" VerticalContentAlignment="Center"
+                                                      ItemsSource="{Binding RoleOptions}" DisplayMemberPath="Title" SelectedValuePath="Role"
+                                                      SelectedValue="{Binding Role, Mode=OneWay}" Visibility="{Binding RoleComboVisibility}"
+                                                      SelectionChanged="CmbMemberRole_SelectionChanged"/>
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding RoleTitle}" Foreground="#7F8C8D" VerticalAlignment="Center" Margin="0,0,12,0"
+                                                       Visibility="{Binding RoleTextVisibility}"/>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding FullName}" FontWeight="SemiBold" Foreground="#2C3E50"/>
+                                                <TextBlock Text="{Binding Email}" FontSize="12" Foreground="#7F8C8D"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
 
-                    <TextBlock Grid.Row="0" Text="Учасники проєкту:" FontWeight="SemiBold" Foreground="#2C3E50" Margin="0,0,0,8"/>
-
-                    <Border Grid.Row="1" BorderBrush="#E0E6ED" BorderThickness="1" CornerRadius="6" Padding="8">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <ItemsControl x:Name="LstMembers">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border BorderBrush="#F0F2F5" BorderThickness="0,0,0,1" Padding="6,8">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="170"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding FullName}" FontWeight="SemiBold" Foreground="#2C3E50"/>
-                                                    <TextBlock Text="{Binding Email}" FontSize="12" Foreground="#7F8C8D"/>
-                                                </StackPanel>
-
-                                                <!-- Випадаючий список ролі (доступний лише Owner для не-Owner учасників) -->
-                                                <ComboBox Grid.Column="1"
-                                                          ItemsSource="{Binding AvailableRoles}"
-                                                          DisplayMemberPath="Title"
-                                                          SelectedValuePath="Role"
-                                                          SelectedValue="{Binding Role, Mode=OneWay}"
-                                                          Visibility="{Binding ComboVisibility}"
-                                                          Height="30"
-                                                          VerticalContentAlignment="Center"
-                                                          SelectionChanged="CmbMemberRole_SelectionChanged"/>
-
-                                                <!-- Текстовий підпис ролі (для самого Owner або коли поточний користувач не Owner) -->
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding RoleDisplay}"
-                                                           Visibility="{Binding TextVisibility}"
-                                                           VerticalAlignment="Center"
-                                                           HorizontalAlignment="Right"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="#5D6D7E"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </Border>
-                </Grid>
-
-                <!-- КНОПКИ ЗБЕРЕЖЕННЯ / ВИДАЛЕННЯ -->
+                <!-- Кнопки керування проєктом (лише для Owner) -->
                 <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="BtnTransferOwnership" Content="Передати власність" Width="155" Height="36" 
+                            Background="#D97706" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" 
+                            Click="BtnTransferOwnership_Click" Margin="0,0,10,0"/>
+
                     <Button x:Name="BtnDelete" Content="Видалити" Width="100" Height="36" 
                             Background="#E74C3C" Foreground="White" BorderThickness="0" Cursor="Hand" 
                             Click="BtnDelete_Click" Margin="0,0,10,0"/>

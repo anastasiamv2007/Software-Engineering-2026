@@ -16,11 +16,13 @@ public interface IProjectRepository
     /// </summary>
     Task<ProjectRole?> GetMemberRoleAsync(Guid projectId, Guid userId);
 
-    Task<IReadOnlyList<ProjectMember>> GetProjectMembersAsync(Guid projectId);
     Task UpdateMemberRoleAsync(Guid projectId, Guid userId, ProjectRole role);
     Task UpdateAsync(Project project);
     Task DeleteAsync(Guid id);
 
     Task AddMemberAsync(ProjectMember member);
     Task<IReadOnlyList<User>> GetProjectUsersAsync(Guid projectId);
+    Task<IReadOnlyList<ProjectMember>> GetMembersAsync(Guid projectId);
+    Task<int> RemoveMemberAsync(Guid projectId, Guid userId);
+    Task TransferOwnershipAsync(Guid projectId, Guid newOwnerId);
 }

@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Controls;
-using SoftwareEngineering.BLL.Interfaces;
+﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Enums;
+using System.Windows;
+using System.Windows.Controls;
 
 namespace SoftwareEngineering.Client;
 
@@ -18,7 +14,6 @@ public partial class ProjectsView : UserControl
     private readonly UserSession _userSession;
     private ProjectModel? _selectedProject;
     private bool _isCreateMode = false;
-    private bool _isLoadingMembers = false;
 
     public ProjectsView()
     {
@@ -63,7 +58,7 @@ public partial class ProjectsView : UserControl
         }
     }
 
-    private async void LstProjects_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void LstProjects_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (LstProjects.SelectedItem is ProjectModel selected)
         {
@@ -75,93 +70,20 @@ public partial class ProjectsView : UserControl
             TxtTasksCount.Text = selected.TasksCount.ToString();
             TxtCreatedAt.Text = selected.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 
-            // Редагувати, видаляти проєкт і керувати учасниками може лише власник
+            // Редагувати, видаляти проєкт і додавати співвиконавців може лише власник
             var isOwner = selected.OwnerId == (_userSession.CurrentUser?.Id ?? Guid.Empty);
             var ownerOnly = isOwner ? Visibility.Visible : Visibility.Collapsed;
 
             TxtProjectName.IsReadOnly = !isOwner;
+            BtnTransferOwnership.Visibility = ownerOnly;
             BtnSave.Visibility = ownerOnly;
             BtnDelete.Visibility = ownerOnly;
             CoExecutorPanel.Visibility = ownerOnly;
             TxtCoExecutorEmail.Text = string.Empty;
-
             MembersPanel.Visibility = Visibility.Visible;
+            _ = LoadMembersAsync(selected.Id, isOwner);
+
             DetailsPanel.Visibility = Visibility.Visible;
-
-            await LoadProjectMembersAsync(selected.Id, isOwner);
-        }
-    }
-
-    private async Task LoadProjectMembersAsync(Guid projectId, bool isCurrentUserOwner)
-    {
-        try
-        {
-            _isLoadingMembers = true;
-            var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
-            var members = await _projectMemberService.GetProjectMembersAsync(projectId);
-
-            var roleOptions = new List<RoleOption>
-            {
-                new(ProjectRole.CoExecutor, "Співвиконавець"),
-                new(ProjectRole.Reviewer, "Читач"),
-            };
-
-            LstMembers.ItemsSource = members.Select(m =>
-            {
-                var canEditRole = isCurrentUserOwner && m.Role != ProjectRole.Owner && m.UserId != currentUserId;
-                return new MemberRowItem
-                {
-                    UserId = m.UserId,
-                    FullName = m.FullName,
-                    Email = m.Email,
-                    Role = m.Role,
-                    AvailableRoles = roleOptions,
-                    ComboVisibility = canEditRole ? Visibility.Visible : Visibility.Collapsed,
-                    TextVisibility = canEditRole ? Visibility.Collapsed : Visibility.Visible,
-                };
-            }).ToList();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Помилка завантаження учасників: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            _isLoadingMembers = false;
-        }
-    }
-
-    private async void CmbMemberRole_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isLoadingMembers || _selectedProject == null)
-        {
-            return;
-        }
-
-        if (sender is not ComboBox comboBox || comboBox.DataContext is not MemberRowItem item)
-        {
-            return;
-        }
-
-        if (comboBox.SelectedValue is not ProjectRole newRole || newRole == item.Role)
-        {
-            return;
-        }
-
-        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
-        var result = await _projectMemberService.ChangeRoleAsync(_selectedProject.Id, item.UserId, newRole, currentUserId);
-
-        if (result.IsSuccess)
-        {
-            item.Role = newRole;
-        }
-        else
-        {
-            MessageBox.Show(result.Error?.Message ?? "Не вдалося змінити роль.", "Помилка", MessageBoxButton.OK, MessageBoxImage.Warning);
-
-            _isLoadingMembers = true;
-            comboBox.SelectedValue = item.Role;
-            _isLoadingMembers = false;
         }
     }
 
@@ -177,13 +99,14 @@ public partial class ProjectsView : UserControl
         TxtCreatedAt.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm");
 
         TxtProjectName.IsReadOnly = false;
+        BtnTransferOwnership.Visibility = Visibility.Collapsed;
         BtnSave.Visibility = Visibility.Visible;
         BtnDelete.Visibility = Visibility.Collapsed;
 
         // Співвиконавців можна додати лише до вже створеного проєкту
         CoExecutorPanel.Visibility = Visibility.Collapsed;
+
         MembersPanel.Visibility = Visibility.Collapsed;
-        LstMembers.ItemsSource = null;
 
         DetailsPanel.Visibility = Visibility.Visible;
         TxtProjectName.Focus();
@@ -200,7 +123,7 @@ public partial class ProjectsView : UserControl
                 var createModel = new CreateProjectModel
                 {
                     Name = TxtProjectName.Text,
-                    OwnerId = currentUserId,
+                    OwnerId = currentUserId
                 };
 
                 await _projectService.CreateProjectAsync(createModel, currentUserId);
@@ -210,7 +133,7 @@ public partial class ProjectsView : UserControl
                 var updateModel = new UpdateProjectModel
                 {
                     Id = _selectedProject.Id,
-                    Name = TxtProjectName.Text,
+                    Name = TxtProjectName.Text
                 };
 
                 await _projectService.UpdateProjectAsync(updateModel, currentUserId);
@@ -249,10 +172,7 @@ public partial class ProjectsView : UserControl
 
     private async void BtnAddCoExecutor_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedProject == null)
-        {
-            return;
-        }
+        if (_selectedProject == null) return;
 
         var email = TxtCoExecutorEmail.Text.Trim();
         var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
@@ -264,9 +184,7 @@ public partial class ProjectsView : UserControl
         {
             MessageBox.Show($"Користувача {email} успішно додано до проєкту!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
             TxtCoExecutorEmail.Text = string.Empty;
-
-            var isOwner = _selectedProject.OwnerId == currentUserId;
-            await LoadProjectMembersAsync(_selectedProject.Id, isOwner);
+            await LoadMembersAsync(_selectedProject.Id, true);
         }
         else
         {
@@ -274,30 +192,184 @@ public partial class ProjectsView : UserControl
         }
     }
 
+    private static string RoleText(ProjectRole role) => role switch
+    {
+        ProjectRole.Owner => "Власник",
+        ProjectRole.CoExecutor => "Співвиконавець",
+        ProjectRole.Reviewer => "Читач",
+        _ => role.ToString(),
+    };
+
+    private async Task LoadMembersAsync(Guid projectId, bool isOwner)
+    {
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+        var result = await _projectMemberService.GetMembersAsync(projectId, currentUserId);
+
+        // Користувач міг вибрати інший проєкт, поки йшов запит
+        if (_selectedProject?.Id != projectId)
+        {
+            return;
+        }
+
+        if (result.IsFailure)
+        {
+            MembersList.ItemsSource = null;
+            return;
+        }
+
+        MembersList.ItemsSource = result.Value!
+            .Select(member =>
+            {
+                // Власника не видаляють і не змінюють йому роль — для цього є «Передати власність»
+                var canManage = isOwner && member.Role != ProjectRole.Owner;
+                return new MemberRow
+                {
+                    UserId = member.UserId,
+                    FullName = member.FullName,
+                    Email = member.Email,
+                    Role = member.Role,
+                    RemoveVisibility = canManage ? Visibility.Visible : Visibility.Collapsed,
+                    RoleComboVisibility = canManage ? Visibility.Visible : Visibility.Collapsed,
+                    RoleTextVisibility = canManage ? Visibility.Collapsed : Visibility.Visible,
+                };
+            })
+            .ToList();
+    }
+
+    private async void CmbMemberRole_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // SelectionChanged спрацьовує і під час побудови списку — реагуємо лише на справжню зміну
+        if (_selectedProject == null
+            || sender is not ComboBox { DataContext: MemberRow row, SelectedValue: ProjectRole newRole } comboBox
+            || newRole == row.Role)
+        {
+            return;
+        }
+
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+        var result = await _projectMemberService.ChangeRoleAsync(_selectedProject.Id, row.UserId, newRole, currentUserId);
+
+        if (result.IsSuccess)
+        {
+            row.Role = newRole;
+            return;
+        }
+
+        MessageBox.Show(result.Error?.Message ?? "Не вдалося змінити роль.", "Роль не змінено", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+        // Повертаємо попереднє значення (повторний SelectionChanged відсіється перевіркою newRole == row.Role)
+        comboBox.SelectedValue = row.Role;
+    }
+
+    private async void BtnRemoveMember_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedProject == null || sender is not Button { Tag: Guid memberId })
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            "Видалити учасника з проєкту?\nЙого задачі перейдуть до власника проєкту, а виконавця в задачах буде знято.",
+            "Підтвердження",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+        var result = await _projectMemberService.RemoveMemberAsync(_selectedProject.Id, memberId, currentUserId);
+
+        if (result.IsFailure)
+        {
+            MessageBox.Show(result.Error?.Message ?? "Невідома помилка", "Учасника не видалено", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        await LoadMembersAsync(_selectedProject.Id, true);
+    }
+
+    private async void BtnTransferOwnership_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedProject == null) return;
+
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+        var candidatesResult = await _projectMemberService.GetTransferCandidatesAsync(_selectedProject.Id, currentUserId);
+
+        if (candidatesResult.IsFailure)
+        {
+            MessageBox.Show(candidatesResult.Error?.Message ?? "Не вдалося отримати список учасників.", "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var candidates = candidatesResult.Value!;
+        if (candidates.Count == 0)
+        {
+            MessageBox.Show(
+                "У проєкті поки немає інших учасників. Спочатку додайте хоча б одного співвиконавця за email.",
+                "Немає кандидатів",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new TransferOwnershipWindow(
+            _projectMemberService,
+            _selectedProject.Id,
+            _selectedProject.Name,
+            currentUserId,
+            candidates)
+        {
+            Owner = Window.GetWindow(this)
+        };
+
+        if (dialog.ShowDialog() == true && dialog.IsTransferred)
+        {
+            var transferredProjectId = _selectedProject.Id;
+
+            await LoadProjectsAsync();
+
+            var updatedProject = LstProjects.Items
+                .OfType<ProjectModel>()
+                .FirstOrDefault(p => p.Id == transferredProjectId);
+
+            if (updatedProject != null)
+            {
+                LstProjects.SelectedItem = updatedProject;
+            }
+        }
+    }
+
     private sealed record RoleOption(ProjectRole Role, string Title);
 
-    private sealed class MemberRowItem
+    /// <summary>
+    /// Рядок списку учасників: роль можна змінити у випадаючому списку (лише Owner).
+    /// </summary>
+    private sealed class MemberRow
     {
-        public Guid UserId { get; set; }
+        public static IReadOnlyList<RoleOption> AssignableRoles { get; } = new[]
+        {
+            new RoleOption(ProjectRole.CoExecutor, RoleText(ProjectRole.CoExecutor)),
+            new RoleOption(ProjectRole.Reviewer, RoleText(ProjectRole.Reviewer)),
+        };
 
-        public string FullName { get; set; } = string.Empty;
+        public Guid UserId { get; init; }
 
-        public string Email { get; set; } = string.Empty;
+        public string FullName { get; init; } = string.Empty;
+
+        public string Email { get; init; } = string.Empty;
 
         public ProjectRole Role { get; set; }
 
-        public string RoleDisplay => Role switch
-        {
-            ProjectRole.Owner => "Власник",
-            ProjectRole.CoExecutor => "Співвиконавець",
-            ProjectRole.Reviewer => "Читач",
-            _ => Role.ToString(),
-        };
+        public string RoleTitle => RoleText(this.Role);
 
-        public List<RoleOption> AvailableRoles { get; set; } = new();
+        public IReadOnlyList<RoleOption> RoleOptions => AssignableRoles;
 
-        public Visibility ComboVisibility { get; set; }
+        public Visibility RemoveVisibility { get; init; }
 
-        public Visibility TextVisibility { get; set; }
+        public Visibility RoleComboVisibility { get; init; }
+
+        public Visibility RoleTextVisibility { get; init; }
     }
 }

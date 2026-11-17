@@ -4,8 +4,6 @@ namespace SoftwareEngineering.BLL.Models;
 
 public class ProjectMemberModel
 {
-    public Guid ProjectId { get; set; }
-
     public Guid UserId { get; set; }
 
     public string FullName { get; set; } = string.Empty;
