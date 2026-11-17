@@ -46,31 +46,24 @@ public partial class DuplicateTaskWindow : Window
     private async void CreateButton_Click(object sender, RoutedEventArgs e)
     {
         CreateButton.IsEnabled = false;
-        try
-        {
-            var result = await taskService.DuplicateAsync(
-                source.Id,
-                new DuplicateTaskModel
-                {
-                    Title = TitleTextBox.Text,
-                    Deadline = DeadlinePicker.SelectedDate,
-                    CopySubtasks = CopySubtasksCheckBox.IsChecked == true,
-                },
-                currentUserId);
-
-            if (result.IsFailure)
+        var result = await taskService.DuplicateAsync(
+            source.Id,
+            new DuplicateTaskModel
             {
-                MessageBox.Show(result.Error!.Message, "Копію не створено", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+                Title = TitleTextBox.Text,
+                Deadline = DeadlinePicker.SelectedDate,
+                CopySubtasks = CopySubtasksCheckBox.IsChecked == true,
+            },
+            currentUserId);
+        CreateButton.IsEnabled = true;
 
-            CreatedTask = result.Value;
-            DialogResult = true;
-        }
-        finally
+        if (result.ShowIfFailed("Копію не створено"))
         {
-            CreateButton.IsEnabled = true;
+            return;
         }
+
+        CreatedTask = result.Value;
+        DialogResult = true;
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)

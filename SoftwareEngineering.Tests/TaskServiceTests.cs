@@ -1,6 +1,6 @@
 using Moq;
-using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Entities;
 using SoftwareEngineering.DAL.Enums;
@@ -43,7 +43,7 @@ public class TaskServiceTests
         var result = await service.CreateAsync(CreateValidModel());
 
         // Assert
-        Assert.Equal(expectedTaskCode, result.TaskCode);
+        Assert.Equal(expectedTaskCode, result.Value!.TaskCode);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class TaskServiceTests
         var result = await service.CreateAsync(CreateValidModel());
 
         // Assert
-        Assert.NotEqual(Guid.Empty, result.Id);
+        Assert.NotEqual(Guid.Empty, result.Value!.Id);
     }
 
     [Fact]
@@ -142,80 +142,80 @@ public class TaskServiceTests
         var result = await service.CreateAsync(model);
 
         // Assert
-        Assert.Equal(model.Title, result.Title);
+        Assert.Equal(model.Title, result.Value!.Title);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public async Task CreateAsync_EmptyTitle_ThrowsValidationException(string? title)
+    public async Task CreateAsync_EmptyTitle_Fails(string? title)
     {
         // Arrange
         var model = CreateValidModel();
         model.Title = title!;
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.CreateAsync(model)).Error?.Type);
     }
 
     [Fact]
-    public async Task CreateAsync_TitleLongerThanMax_ThrowsValidationException()
+    public async Task CreateAsync_TitleLongerThanMax_Fails()
     {
         // Arrange
         var model = CreateValidModel();
         model.Title = new string('a', MaxTitleLength + 1);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.CreateAsync(model)).Error?.Type);
     }
 
     [Fact]
-    public async Task CreateAsync_NoDeadline_ThrowsValidationException()
+    public async Task CreateAsync_NoDeadline_Fails()
     {
         // Arrange
         var model = CreateValidModel();
         model.Deadline = null;
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.CreateAsync(model)).Error?.Type);
     }
 
     [Fact]
-    public async Task CreateAsync_DeadlineInPast_ThrowsValidationException()
+    public async Task CreateAsync_DeadlineInPast_Fails()
     {
         // Arrange
         var model = CreateValidModel();
         model.Deadline = DateTime.UtcNow.AddDays(-1);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.CreateAsync(model)).Error?.Type);
     }
 
     [Fact]
-    public async Task CreateAsync_EmptyProjectId_ThrowsValidationException()
+    public async Task CreateAsync_EmptyProjectId_Fails()
     {
         // Arrange
         var model = CreateValidModel();
         model.ProjectId = Guid.Empty;
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.CreateAsync(model)).Error?.Type);
     }
 
     [Fact]
-    public async Task CreateAsync_NullModel_ThrowsValidationException()
+    public async Task CreateAsync_NullModel_Fails()
     {
         // Arrange
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(null!));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.CreateAsync(null!)).Error?.Type);
     }
 
     [Fact]
@@ -227,14 +227,14 @@ public class TaskServiceTests
         var service = this.CreateService();
 
         // Act
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+        Assert.Equal(ErrorType.Validation, (await service.CreateAsync(model)).Error?.Type);
 
         // Assert
         this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
     }
 
     [Fact]
-    public async Task CreateAsync_RepositoryFails_PropagatesException()
+    public async Task CreateAsync_RepositoryFails_ReturnsUnexpected()
     {
         // Arrange
         this.repositoryMock
@@ -242,8 +242,8 @@ public class TaskServiceTests
             .ThrowsAsync(new InvalidOperationException());
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateAsync(CreateValidModel()));
+        // Act + Assert
+        Assert.Equal(ErrorType.Unexpected, (await service.CreateAsync(CreateValidModel())).Error?.Type);
     }
 
     [Fact]
@@ -266,7 +266,7 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_MissingCategory_ThrowsAndDoesNotSave()
+    public async Task CreateAsync_MissingCategory_ReturnsNotFoundAndDoesNotSave()
     {
         // Arrange
         var model = CreateValidModel();
@@ -274,7 +274,7 @@ public class TaskServiceTests
         var service = this.CreateService();
 
         // Act
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+        Assert.Equal(ErrorType.NotFound, (await service.CreateAsync(model)).Error?.Type);
 
         // Assert
         this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
@@ -302,8 +302,8 @@ public class TaskServiceTests
         var result = await service.GetAllAsync();
 
         // Assert
-        Assert.Equal("Робота", result[0].CategoryName);
-        Assert.Equal("#EF4444", result[0].CategoryColorHex);
+        Assert.Equal("Робота", result.Value![0].CategoryName);
+        Assert.Equal("#EF4444", result.Value![0].CategoryColorHex);
     }
 
     [Fact]
@@ -320,7 +320,7 @@ public class TaskServiceTests
         var result = await service.GetUserTasksAsync(userId);
 
         // Assert
-        Assert.Single(result);
+        Assert.Single(result.Value!);
         this.repositoryMock.Verify(repository => repository.GetAsync(), Times.Never);
     }
 
@@ -336,14 +336,14 @@ public class TaskServiceTests
         var result = await service.GetDetailsAsync(task.Id, owner.Id);
 
         // Assert
-        Assert.Equal("Лаб", result.ProjectName);
-        Assert.Equal(owner.FullName, result.ProjectOwnerName);
-        Assert.Equal(coExecutor.FullName, result.OwnerName);
-        Assert.Equal(1, result.SubtasksCompleted);
-        Assert.Equal(2, result.SubtasksTotal);
-        Assert.Equal(2, result.Members.Count);
-        Assert.Equal(ProjectRole.Owner, result.CurrentUserRole);
-        Assert.True(result.CanDeleteOrChangeDeadline);
+        Assert.Equal("Лаб", result.Value!.ProjectName);
+        Assert.Equal(owner.FullName, result.Value!.ProjectOwnerName);
+        Assert.Equal(coExecutor.FullName, result.Value!.OwnerName);
+        Assert.Equal(1, result.Value!.SubtasksCompleted);
+        Assert.Equal(2, result.Value!.SubtasksTotal);
+        Assert.Equal(2, result.Value!.Members.Count);
+        Assert.Equal(ProjectRole.Owner, result.Value!.CurrentUserRole);
+        Assert.True(result.Value!.CanDeleteOrChangeDeadline);
     }
 
     [Fact]
@@ -362,20 +362,20 @@ public class TaskServiceTests
         var result = await service.GetDetailsAsync(task.Id, otherCoExecutor.Id);
 
         // Assert
-        Assert.True(result.CanEdit);
-        Assert.False(result.CanDeleteOrChangeDeadline);
+        Assert.True(result.Value!.CanEdit);
+        Assert.False(result.Value!.CanDeleteOrChangeDeadline);
     }
 
     [Fact]
-    public async Task GetDetailsAsync_UserOutsideProject_ThrowsValidationException()
+    public async Task GetDetailsAsync_UserOutsideProject_Fails()
     {
         // Arrange
         var (task, _, _) = CreateDetailedTask();
         this.repositoryMock.Setup(repository => repository.GetDetailsAsync(task.Id)).ReturnsAsync(task);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.GetDetailsAsync(task.Id, Guid.NewGuid()));
+        // Act + Assert
+        Assert.Equal(ErrorType.Forbidden, (await service.GetDetailsAsync(task.Id, Guid.NewGuid())).Error?.Type);
     }
 
     private static (TaskItem Task, User Owner, User CoExecutor) CreateDetailedTask()
@@ -438,18 +438,19 @@ public class TaskServiceTests
     // 2
 
     [Fact]
-    public async Task GetByIdAsync_EmptyId_ThrowsValidationException()
+    public async Task GetByIdAsync_EmptyId_Fails()
     {
         var mockRepo = new Mock<ITaskRepository>();
         var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
         var emptyId = Guid.Empty;
 
-        var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(emptyId));
-        Assert.Contains("не може бути порожнім", exception.Message);
+        var failed = await service.GetByIdAsync(emptyId);
+        Assert.Equal(ErrorType.Validation, failed.Error?.Type);
+        Assert.Contains("не може бути порожнім", failed.Error!.Message);
     }
 
     [Fact]
-    public async Task GetByIdAsync_TaskNotFound_ThrowsValidationException()
+    public async Task GetByIdAsync_TaskNotFound_Fails()
     {
         var mockRepo = new Mock<ITaskRepository>();
         var fakeId = Guid.NewGuid();
@@ -457,8 +458,9 @@ public class TaskServiceTests
         mockRepo.Setup(repo => repo.GetByIdAsync(fakeId)).ReturnsAsync((TaskItem?)null);
         var service = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
-        var exception = await Assert.ThrowsAsync<ValidationException>(() => service.GetByIdAsync(fakeId));
-        Assert.Contains("не знайдено", exception.Message);
+        var failed = await service.GetByIdAsync(fakeId);
+        Assert.Equal(ErrorType.NotFound, failed.Error?.Type);
+        Assert.Contains("не знайдено", failed.Error!.Message);
     }
 
     [Fact]
@@ -481,8 +483,8 @@ public class TaskServiceTests
         var result = await service.GetByIdAsync(validId);
 
         Assert.NotNull(result);
-        Assert.Equal(validId, result.Id);
-        Assert.Equal("Тестове завдання", result.Title);
+        Assert.Equal(validId, result.Value!.Id);
+        Assert.Equal("Тестове завдання", result.Value!.Title);
     }
 
     // 3
@@ -528,7 +530,7 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task UpdateAsync_EmptyTitle_ThrowsValidationException()
+    public async Task UpdateAsync_EmptyTitle_Fails()
     {
         var invalidModel = new TaskModel
         {
@@ -539,7 +541,7 @@ public class TaskServiceTests
         };
         var service = this.CreateService();
 
-        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(invalidModel, Guid.NewGuid()));
+        Assert.Equal(ErrorType.Validation, (await service.UpdateAsync(invalidModel, Guid.NewGuid())).Error?.Type);
 
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
     }
@@ -579,7 +581,7 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task UpdateDeadlineAsync_UserIsAssigneeNotOwner_ThrowsValidationException()
+    public async Task UpdateDeadlineAsync_UserIsAssigneeNotOwner_Fails()
     {
         // Arrange
         var taskId = Guid.NewGuid();
@@ -602,16 +604,16 @@ public class TaskServiceTests
 
         var service = this.CreateService();
 
-        // Act and Assert
-        var exception = await Assert.ThrowsAsync<ValidationException>(() =>
-            service.UpdateDeadlineAsync(taskId, newDeadline, assigneeId));
+        // Act + Assert
+        var failed = await service.UpdateDeadlineAsync(taskId, newDeadline, assigneeId);
+        Assert.Equal(ErrorType.Forbidden, failed.Error?.Type);
 
-        Assert.Contains("лише власник завдання або проєкту", exception.Message);
+        Assert.Contains("лише власник завдання або проєкту", failed.Error!.Message);
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
     }
 
     [Fact]
-    public async Task UpdateDeadlineAsync_DeadlineInPast_ThrowsValidationException()
+    public async Task UpdateDeadlineAsync_DeadlineInPast_Fails()
     {
         // Arrange
         var taskId = Guid.NewGuid();
@@ -620,9 +622,8 @@ public class TaskServiceTests
 
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() =>
-            service.UpdateDeadlineAsync(taskId, pastDeadline, currentUserId));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.UpdateDeadlineAsync(taskId, pastDeadline, currentUserId)).Error?.Type);
 
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
     }
@@ -642,7 +643,7 @@ public class TaskServiceTests
         var result = await service.UpdateProgressAsync(entity.Id, newStatus, userId);
 
         // Assert
-        Assert.Equal(newStatus, result.Status);
+        Assert.Equal(newStatus, result.Value!.Status);
     }
 
     [Fact]
@@ -672,45 +673,42 @@ public class TaskServiceTests
         var result = await service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, userId);
 
         // Assert
-        Assert.Equal(entity.Id, result.Id);
+        Assert.Equal(entity.Id, result.Value!.Id);
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_EmptyTaskId_ThrowsValidationException()
+    public async Task UpdateProgressAsync_EmptyTaskId_Fails()
     {
         // Arrange
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateProgressAsync(Guid.Empty, TaskItemStatus.Done, Guid.NewGuid()));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.UpdateProgressAsync(Guid.Empty, TaskItemStatus.Done, Guid.NewGuid())).Error?.Type);
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_EmptyUserId_ThrowsValidationException()
+    public async Task UpdateProgressAsync_EmptyUserId_Fails()
     {
         // Arrange
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateProgressAsync(Guid.NewGuid(), TaskItemStatus.Done, Guid.Empty));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.UpdateProgressAsync(Guid.NewGuid(), TaskItemStatus.Done, Guid.Empty)).Error?.Type);
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_UndefinedStatus_ThrowsValidationException()
+    public async Task UpdateProgressAsync_UndefinedStatus_Fails()
     {
         // Arrange
         var service = this.CreateService();
         const TaskItemStatus undefinedStatus = (TaskItemStatus)999;
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateProgressAsync(Guid.NewGuid(), undefinedStatus, Guid.NewGuid()));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.UpdateProgressAsync(Guid.NewGuid(), undefinedStatus, Guid.NewGuid())).Error?.Type);
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_TaskNotFound_ThrowsValidationException()
+    public async Task UpdateProgressAsync_TaskNotFound_Fails()
     {
         // Arrange
         this.repositoryMock
@@ -718,22 +716,20 @@ public class TaskServiceTests
             .ReturnsAsync((TaskItem?)null);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateProgressAsync(Guid.NewGuid(), TaskItemStatus.Done, Guid.NewGuid()));
+        // Act + Assert
+        Assert.Equal(ErrorType.NotFound, (await service.UpdateProgressAsync(Guid.NewGuid(), TaskItemStatus.Done, Guid.NewGuid())).Error?.Type);
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_UserIsNotProjectMember_ThrowsValidationException()
+    public async Task UpdateProgressAsync_UserIsNotProjectMember_Fails()
     {
         // Arrange
         this.SetProjectRole(null);
         var entity = this.CreateAssignedTask(out _);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid()));
+        // Act + Assert
+        Assert.Equal(ErrorType.Forbidden, (await service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid())).Error?.Type);
     }
 
     [Fact]
@@ -749,20 +745,19 @@ public class TaskServiceTests
         var result = await service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid());
 
         // Assert
-        Assert.Equal(TaskItemStatus.Done, result.Status);
+        Assert.Equal(TaskItemStatus.Done, result.Value!.Status);
         this.repositoryMock.Verify(repository => repository.UpdateAsync(entity), Times.Once);
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_SameStatus_ThrowsValidationException()
+    public async Task UpdateProgressAsync_SameStatus_Fails()
     {
         // Arrange
         var entity = this.CreateAssignedTask(out var userId);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateProgressAsync(entity.Id, entity.Status, userId));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.UpdateProgressAsync(entity.Id, entity.Status, userId)).Error?.Type);
     }
 
     [Fact]
@@ -774,15 +769,14 @@ public class TaskServiceTests
         var service = this.CreateService();
 
         // Act
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid()));
+        Assert.Equal(ErrorType.Forbidden, (await service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, Guid.NewGuid())).Error?.Type);
 
         // Assert
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
     }
 
     [Fact]
-    public async Task UpdateProgressAsync_RepositoryFails_PropagatesException()
+    public async Task UpdateProgressAsync_RepositoryFails_ReturnsUnexpected()
     {
         // Arrange
         var entity = this.CreateAssignedTask(out var userId);
@@ -791,22 +785,21 @@ public class TaskServiceTests
             .ThrowsAsync(new InvalidOperationException());
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, userId));
+        // Act + Assert
+        Assert.Equal(ErrorType.Unexpected, (await service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, userId)).Error?.Type);
     }
 
     // Матриця прав: власник проєкту / співвиконавець
 
     [Fact]
-    public async Task CreateAsync_UserIsNotProjectMember_ThrowsValidationException()
+    public async Task CreateAsync_UserIsNotProjectMember_Fails()
     {
         // Arrange
         this.SetProjectRole(null);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(CreateValidModel()));
+        // Act + Assert
+        Assert.Equal(ErrorType.Forbidden, (await service.CreateAsync(CreateValidModel())).Error?.Type);
         this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
     }
 
@@ -843,7 +836,7 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task UpdateAsync_CoExecutorChangesDeadlineOfOthersTask_ThrowsValidationException()
+    public async Task UpdateAsync_CoExecutorChangesDeadlineOfOthersTask_Fails()
     {
         // Arrange
         var task = new TaskItem { Id = Guid.NewGuid(), OwnerId = Guid.NewGuid(), Title = "Завдання", Deadline = DateTime.UtcNow.AddDays(1) };
@@ -851,8 +844,8 @@ public class TaskServiceTests
         var model = new TaskModel { Id = task.Id, Title = "Завдання", Deadline = DateTime.UtcNow.AddDays(5) };
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateAsync(model, Guid.NewGuid()));
+        // Act + Assert
+        Assert.Equal(ErrorType.Forbidden, (await service.UpdateAsync(model, Guid.NewGuid())).Error?.Type);
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
     }
 
@@ -888,21 +881,20 @@ public class TaskServiceTests
         var result = await service.DeleteTaskByOwnerAsync(new TaskModel { Id = task.Id }, ownerId);
 
         // Assert
-        Assert.Equal(task.Id, result.Id);
+        Assert.Equal(task.Id, result.Value!.Id);
         this.repositoryMock.Verify(repository => repository.DeleteAsync(task), Times.Once);
     }
 
     [Fact]
-    public async Task DeleteTaskByOwnerAsync_UserIsNotOwner_ThrowsValidationException()
+    public async Task DeleteTaskByOwnerAsync_UserIsNotOwner_Fails()
     {
         // Arrange
         var task = new TaskItem { Id = Guid.NewGuid(), OwnerId = Guid.NewGuid() };
         this.repositoryMock.Setup(repository => repository.GetByIdAsync(task.Id)).ReturnsAsync(task);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.DeleteTaskByOwnerAsync(new TaskModel { Id = task.Id }, Guid.NewGuid()));
+        // Act + Assert
+        Assert.Equal(ErrorType.Forbidden, (await service.DeleteTaskByOwnerAsync(new TaskModel { Id = task.Id }, Guid.NewGuid())).Error?.Type);
         this.repositoryMock.Verify(repository => repository.DeleteAsync(It.IsAny<TaskItem>()), Times.Never);
     }
 
@@ -920,19 +912,19 @@ public class TaskServiceTests
         // Assert
         Assert.Equal(model.OwnerId, this.savedTask!.OwnerId);
         Assert.Equal(model.OwnerId, this.savedTask.CreatorId);
-        Assert.Equal(model.OwnerId, result.OwnerId);
+        Assert.Equal(model.OwnerId, result.Value!.OwnerId);
     }
 
     [Fact]
-    public async Task CreateAsync_EmptyOwnerId_ThrowsValidationException()
+    public async Task CreateAsync_EmptyOwnerId_Fails()
     {
         // Arrange
         var model = CreateValidModel();
         model.OwnerId = Guid.Empty;
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateAsync(model));
+        // Act + Assert
+        Assert.Equal(ErrorType.Validation, (await service.CreateAsync(model)).Error?.Type);
     }
 
     // 5
@@ -959,7 +951,7 @@ public class TaskServiceTests
 
     // Тест 2: Помилка доступу (користувач НЕ є творцем завдання)
     [Fact]
-    public async Task DeleteTaskAsync_UserIsNotOwner_ThrowsException()
+    public async Task DeleteTaskAsync_UserIsNotOwner_ReturnsForbidden()
     {
         // Arrange
         var taskId = Guid.NewGuid();
@@ -973,15 +965,14 @@ public class TaskServiceTests
         var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ValidationException>(() =>
-            taskService.DeleteTaskAsync(taskId, strangerId));
+        Assert.Equal(ErrorType.Forbidden, (await taskService.DeleteTaskAsync(taskId, strangerId)).Error?.Type);
 
         mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     // Тест 3: Завдання не знайдено в базі
     [Fact]
-    public async Task DeleteTaskAsync_TaskDoesNotExist_ThrowsException()
+    public async Task DeleteTaskAsync_TaskDoesNotExist_ReturnsNotFound()
     {
         // Arrange
         var taskId = Guid.NewGuid();
@@ -995,42 +986,39 @@ public class TaskServiceTests
         var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ValidationException>(() =>
-            taskService.DeleteTaskAsync(taskId, userId));
+        Assert.Equal(ErrorType.NotFound, (await taskService.DeleteTaskAsync(taskId, userId)).Error?.Type);
 
         mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]
-    public async Task DeleteTaskAsync_EmptyTaskId_ThrowsValidationException()
+    public async Task DeleteTaskAsync_EmptyTaskId_Fails()
     {
         // Arrange
         var mockRepo = new Mock<ITaskRepository>();
         var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ValidationException>(() =>
-            taskService.DeleteTaskAsync(Guid.Empty, Guid.NewGuid()));
+        Assert.Equal(ErrorType.Validation, (await taskService.DeleteTaskAsync(Guid.Empty, Guid.NewGuid())).Error?.Type);
 
         mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]
-    public async Task DeleteTaskAsync_EmptyUserId_ThrowsValidationException()
+    public async Task DeleteTaskAsync_EmptyUserId_Fails()
     {
         // Arrange
         var mockRepo = new Mock<ITaskRepository>();
         var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         // Act & Assert
-        await Assert.ThrowsAsync<ValidationException>(() =>
-            taskService.DeleteTaskAsync(Guid.NewGuid(), Guid.Empty));
+        Assert.Equal(ErrorType.Validation, (await taskService.DeleteTaskAsync(Guid.NewGuid(), Guid.Empty)).Error?.Type);
 
         mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]
-    public async Task GetByIdAsync_RepositoryThrowsException_PropagatesException()
+    public async Task GetByIdAsync_RepositoryThrowsException_ReturnsUnexpected()
     {
         // Arrange
         var taskId = Guid.NewGuid();
@@ -1040,7 +1028,6 @@ public class TaskServiceTests
         var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
 
         // Act & Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            taskService.GetByIdAsync(taskId));
+        Assert.Equal(ErrorType.Unexpected, (await taskService.GetByIdAsync(taskId)).Error?.Type);
     }
 }

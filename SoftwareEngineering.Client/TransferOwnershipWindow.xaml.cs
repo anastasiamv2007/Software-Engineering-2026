@@ -71,28 +71,22 @@ public partial class TransferOwnershipWindow : Window
         }
 
         BtnConfirm.IsEnabled = false;
-        try
-        {
-            var result = await _projectMemberService.TransferOwnershipAsync(_projectId, selectedMember.UserId, _currentUserId);
-            if (result.IsFailure)
-            {
-                MessageBox.Show(result.Error?.Message ?? "Помилка передачі прав.", "Помилка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+        var result = await _projectMemberService.TransferOwnershipAsync(_projectId, selectedMember.UserId, _currentUserId);
+        BtnConfirm.IsEnabled = true;
 
-            IsTransferred = true;
-            MessageBox.Show(
-                $"Права власності успішно передано користувачу {selectedMember.FullName}. Тепер ваша роль у проєкті — співвиконавець.",
-                "Власність передано",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-
-            DialogResult = true;
-            Close();
-        }
-        finally
+        if (result.ShowIfFailed("Власність не передано"))
         {
-            BtnConfirm.IsEnabled = true;
+            return;
         }
+
+        IsTransferred = true;
+        MessageBox.Show(
+            $"Права власності успішно передано користувачу {selectedMember.FullName}. Тепер ваша роль у проєкті — співвиконавець.",
+            "Власність передано",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+
+        DialogResult = true;
+        Close();
     }
 }

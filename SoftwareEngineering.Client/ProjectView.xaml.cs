@@ -1,5 +1,6 @@
 ﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Enums;
 using System.Windows;
@@ -43,19 +44,16 @@ public partial class ProjectsView : UserControl
 
     private async Task LoadProjectsAsync()
     {
-        try
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+        var projects = await _projectService.GetUserProjectsAsync(currentUserId);
+        if (projects.ShowIfFailed("Не вдалося завантажити проєкти"))
         {
-            var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
-            var projects = await _projectService.GetUserProjectsAsync(currentUserId);
+            return;
+        }
 
-            LstProjects.ItemsSource = projects.ToList();
-            DetailsPanel.Visibility = Visibility.Collapsed;
-            _selectedProject = null;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Помилка завантаження проєктів: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+        LstProjects.ItemsSource = projects.Value!;
+        DetailsPanel.Visibility = Visibility.Collapsed;
+        _selectedProject = null;
     }
 
     private void LstProjects_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -114,37 +112,32 @@ public partial class ProjectsView : UserControl
 
     private async void BtnSave_Click(object sender, RoutedEventArgs e)
     {
-        try
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+
+        Result result;
+        if (_isCreateMode)
         {
-            var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
-
-            if (_isCreateMode)
-            {
-                var createModel = new CreateProjectModel
-                {
-                    Name = TxtProjectName.Text,
-                    OwnerId = currentUserId
-                };
-
-                await _projectService.CreateProjectAsync(createModel, currentUserId);
-            }
-            else if (_selectedProject != null)
-            {
-                var updateModel = new UpdateProjectModel
-                {
-                    Id = _selectedProject.Id,
-                    Name = TxtProjectName.Text
-                };
-
-                await _projectService.UpdateProjectAsync(updateModel, currentUserId);
-            }
-
-            await LoadProjectsAsync();
+            result = await _projectService.CreateProjectAsync(
+                new CreateProjectModel { Name = TxtProjectName.Text, OwnerId = currentUserId },
+                currentUserId);
         }
-        catch (Exception ex)
+        else if (_selectedProject != null)
         {
-            MessageBox.Show(ex.Message, "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
+            result = await _projectService.UpdateProjectAsync(
+                new UpdateProjectModel { Id = _selectedProject.Id, Name = TxtProjectName.Text },
+                currentUserId);
         }
+        else
+        {
+            return;
+        }
+
+        if (result.ShowIfFailed("Проєкт не збережено"))
+        {
+            return;
+        }
+
+        await LoadProjectsAsync();
     }
 
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
@@ -156,16 +149,14 @@ public partial class ProjectsView : UserControl
 
             if (result == MessageBoxResult.Yes)
             {
-                try
+                var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+                var deleted = await _projectService.DeleteProjectAsync(_selectedProject.Id, currentUserId);
+                if (deleted.ShowIfFailed("Проєкт не видалено"))
                 {
-                    var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
-                    await _projectService.DeleteProjectAsync(_selectedProject.Id, currentUserId);
-                    await LoadProjectsAsync();
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+
+                await LoadProjectsAsync();
             }
         }
     }
@@ -180,16 +171,14 @@ public partial class ProjectsView : UserControl
         // Сервіс сам перевіряє email і права та не кидає винятків — помилка приходить у Result
         var result = await _projectMemberService.AddCoExecutorAsync(_selectedProject.Id, email, currentUserId);
 
-        if (result.IsSuccess)
+        if (result.ShowIfFailed("Співвиконавця не додано"))
         {
-            MessageBox.Show($"Користувача {email} успішно додано до проєкту!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
-            TxtCoExecutorEmail.Text = string.Empty;
-            await LoadMembersAsync(_selectedProject.Id, true);
+            return;
         }
-        else
-        {
-            MessageBox.Show(result.Error?.Message ?? "Невідома помилка", "Помилка додавання", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
+
+        MessageBox.Show($"Користувача {email} успішно додано до проєкту!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+        TxtCoExecutorEmail.Text = string.Empty;
+        await LoadMembersAsync(_selectedProject.Id, true);
     }
 
     private static string RoleText(ProjectRole role) => role switch
@@ -282,11 +271,8 @@ public partial class ProjectsView : UserControl
         var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
         var result = await _projectMemberService.RemoveMemberAsync(_selectedProject.Id, memberId, currentUserId);
 
-        if (result.IsFailure)
-        {
-            MessageBox.Show(result.Error?.Message ?? "Невідома помилка", "Учасника не видалено", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-
+        // Список перечитуємо в будь-якому разі: учасника могли вже прибрати з іншого ПК
+        result.ShowIfFailed("Учасника не видалено");
         await LoadMembersAsync(_selectedProject.Id, true);
     }
 
@@ -297,9 +283,8 @@ public partial class ProjectsView : UserControl
         var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
         var candidatesResult = await _projectMemberService.GetTransferCandidatesAsync(_selectedProject.Id, currentUserId);
 
-        if (candidatesResult.IsFailure)
+        if (candidatesResult.ShowIfFailed("Не вдалося отримати список учасників"))
         {
-            MessageBox.Show(candidatesResult.Error?.Message ?? "Не вдалося отримати список учасників.", "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 

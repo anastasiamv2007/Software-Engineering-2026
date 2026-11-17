@@ -10,8 +10,6 @@ namespace SoftwareEngineering.BLL.Services;
 
 public class ProjectMemberService : BaseService, IProjectMemberService
 {
-    private const string UnexpectedErrorMessage = "Сталася внутрішня помилка. Спробуйте ще раз.";
-
     private static readonly Regex EmailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled);
 
     private readonly IProjectRepository projectRepository;
@@ -23,52 +21,45 @@ public class ProjectMemberService : BaseService, IProjectMemberService
         this.userRepository = userRepository;
     }
 
-    public async Task<Result> AddCoExecutorAsync(Guid projectId, string email, Guid currentUserId)
+    public Task<Result> AddCoExecutorAsync(Guid projectId, string email, Guid currentUserId)
     {
-        try
+        return this.ExecuteAsync("Додавання співвиконавця", async () =>
         {
-            // Параметри у {фігурних дужках} стають полями для фільтрації в Seq
-            this.Logger.Information(
-                "Спроба додати співвиконавця {Email} до проєкту {ProjectId} користувачем {UserId}",
-                email,
-                projectId,
-                currentUserId);
-
             // 0. Перевірка вхідних даних
             var normalizedEmail = email?.Trim().ToLowerInvariant() ?? string.Empty;
             if (!EmailRegex.IsMatch(normalizedEmail))
             {
-                return this.Fail(ErrorType.Validation, "Введіть коректний email користувача.");
+                return Result.Fail(ErrorType.Validation, "Введіть коректний email користувача.");
             }
 
-            // 1. Перевірка: чи є currentUserId Owner-ом цього проєкту?
+            // 1. Діє Owner проєкту
             var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
             if (currentRole != ProjectRole.Owner)
             {
-                return this.Fail(ErrorType.Forbidden, "Тільки власник проєкту може додавати співвиконавців.");
+                return Result.Fail(ErrorType.Forbidden, "Тільки власник проєкту може додавати співвиконавців.");
             }
 
-            // 2. Пошук: чи існує користувач з таким email?
+            // 2. Користувач з таким email існує
             var targetUser = await this.userRepository.GetByEmailAsync(normalizedEmail);
             if (targetUser == null)
             {
-                return this.Fail(ErrorType.NotFound, "Користувача з таким email не знайдено.");
+                return Result.Fail(ErrorType.NotFound, "Користувача з таким email не знайдено.");
             }
 
-            // 3. Перевірка: чи цей email не належить самому Owner-у?
+            // 3. Email не належить самому Owner-у
             if (targetUser.Id == currentUserId)
             {
-                return this.Fail(ErrorType.Validation, "Ви не можете додати самого себе як співвиконавця.");
+                return Result.Fail(ErrorType.Validation, "Ви не можете додати самого себе як співвиконавця.");
             }
 
-            // 4. Перевірка: чи цей користувач вже не є учасником?
+            // 4. Користувач ще не учасник
             var targetUserRole = await this.projectRepository.GetMemberRoleAsync(projectId, targetUser.Id);
             if (targetUserRole != null)
             {
-                return this.Fail(ErrorType.Duplicate, "Цей користувач вже є учасником проєкту.");
+                return Result.Fail(ErrorType.Duplicate, "Цей користувач вже є учасником проєкту.");
             }
 
-            // 5. Збереження: створення ProjectMember з роллю CoExecutor
+            // 5. Збереження: ProjectMember з роллю CoExecutor
             await this.projectRepository.AddMemberAsync(new ProjectMember
             {
                 ProjectId = projectId,
@@ -76,32 +67,31 @@ public class ProjectMemberService : BaseService, IProjectMemberService
                 Role = ProjectRole.CoExecutor,
             });
 
+            // Параметри у {фігурних дужках} стають полями для фільтрації в Seq
             this.Logger.Information(
-                "Користувача {TargetUserId} додано співвиконавцем до проєкту {ProjectId}",
+                "Користувач {UserId} додав співвиконавця {TargetUserId} ({Email}) до проєкту {ProjectId}",
+                currentUserId,
                 targetUser.Id,
+                normalizedEmail,
                 projectId);
 
             return Result.Ok();
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час додавання співвиконавця до проєкту {ProjectId}", projectId);
-            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        });
     }
-    public async Task<Result<IReadOnlyList<ProjectMemberModel>>> GetMembersAsync(Guid projectId, Guid currentUserId)
+
+    public Task<Result<IReadOnlyList<ProjectMemberModel>>> GetMembersAsync(Guid projectId, Guid currentUserId)
     {
-        try
+        return this.ExecuteAsync("Отримання учасників проєкту", async () =>
         {
             if (projectId == Guid.Empty || currentUserId == Guid.Empty)
             {
-                return this.FailWith<IReadOnlyList<ProjectMemberModel>>(ErrorType.Validation, "Не вказано проєкт або користувача.");
+                return Result.Fail<IReadOnlyList<ProjectMemberModel>>(ErrorType.Validation, "Не вказано проєкт або користувача.");
             }
 
             var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
             if (currentRole is null)
             {
-                return this.FailWith<IReadOnlyList<ProjectMemberModel>>(ErrorType.Forbidden, "Список учасників доступний лише учасникам проєкту.");
+                return Result.Fail<IReadOnlyList<ProjectMemberModel>>(ErrorType.Forbidden, "Список учасників доступний лише учасникам проєкту.");
             }
 
             var members = await this.projectRepository.GetMembersAsync(projectId);
@@ -137,47 +127,36 @@ public class ProjectMemberService : BaseService, IProjectMemberService
                 .ToList();
 
             return Result.Ok(sorted);
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час отримання учасників проєкту {ProjectId}", projectId);
-            return Result.Fail<IReadOnlyList<ProjectMemberModel>>(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        });
     }
 
-    public async Task<Result> RemoveMemberAsync(Guid projectId, Guid memberId, Guid currentUserId)
+    public Task<Result> RemoveMemberAsync(Guid projectId, Guid memberId, Guid currentUserId)
     {
-        try
+        return this.ExecuteAsync("Видалення учасника", async () =>
         {
-            this.Logger.Information(
-                "Спроба видалити учасника {MemberId} з проєкту {ProjectId} користувачем {UserId}",
-                memberId,
-                projectId,
-                currentUserId);
-
             if (projectId == Guid.Empty || memberId == Guid.Empty || currentUserId == Guid.Empty)
             {
-                return this.FailWith(ErrorType.Validation, "Не вказано проєкт, учасника або користувача.");
+                return Result.Fail(ErrorType.Validation, "Не вказано проєкт, учасника або користувача.");
             }
 
             // 1. Діє Owner
             var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
             if (currentRole != ProjectRole.Owner)
             {
-                return this.FailWith(ErrorType.Forbidden, "Тільки власник проєкту може видаляти учасників.");
+                return Result.Fail(ErrorType.Forbidden, "Тільки власник проєкту може видаляти учасників.");
             }
 
             // 2. Учасник існує
             var memberRole = await this.projectRepository.GetMemberRoleAsync(projectId, memberId);
             if (memberRole is null)
             {
-                return this.FailWith(ErrorType.NotFound, "Учасника в цьому проєкті не знайдено.");
+                return Result.Fail(ErrorType.NotFound, "Учасника в цьому проєкті не знайдено.");
             }
 
             // 3. Owner не видаляє сам себе
             if (memberId == currentUserId)
             {
-                return this.FailWith(ErrorType.Validation, "Ви не можете видалити самого себе: спершу передайте власність.");
+                return Result.Fail(ErrorType.Validation, "Ви не можете видалити самого себе: спершу передайте власність.");
             }
 
             // 4. Одна транзакція в репозиторії: учасник, виконавець у задачах, власник задач
@@ -191,71 +170,41 @@ public class ProjectMemberService : BaseService, IProjectMemberService
                 reassigned);
 
             return Result.Ok();
-        }
-        catch (Exception ex)
+        });
+    }
+
+    public Task<Result> ChangeRoleAsync(Guid projectId, Guid memberId, ProjectRole newRole, Guid currentUserId)
+    {
+        return this.ExecuteAsync("Зміна ролі учасника", async () =>
         {
-            this.Logger.Error(ex, "Критична помилка під час видалення учасника {MemberId} з проєкту {ProjectId}", memberId, projectId);
-            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
-    }
-
-    private Result FailWith(ErrorType type, string message)
-    {
-        this.Logger.Warning("Операцію з учасниками відхилено ({ErrorType}): {ErrorMessage}", type, message);
-        return Result.Fail(type, message);
-    }
-
-    private Result<T> FailWith<T>(ErrorType type, string message)
-    {
-        this.Logger.Warning("Операцію з учасниками відхилено ({ErrorType}): {ErrorMessage}", type, message);
-        return Result.Fail<T>(type, message);
-    }
-
-    private Result Fail(ErrorType type, string message)
-    {
-        this.Logger.Warning("Додавання співвиконавця відхилено ({ErrorType}): {ErrorMessage}", type, message);
-        return Result.Fail(type, message);
-    }
-
-    public async Task<Result> ChangeRoleAsync(Guid projectId, Guid memberId, ProjectRole newRole, Guid currentUserId)
-    {
-        try
-        {
-            this.Logger.Information(
-                "Спроба змінити роль учасника {MemberId} у проєкті {ProjectId} на {NewRole} користувачем {UserId}",
-                memberId,
-                projectId,
-                newRole,
-                currentUserId);
-
             // 1. Діє Owner
             var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
             if (currentRole != ProjectRole.Owner)
             {
-                return this.FailWith(ErrorType.Forbidden, "Тільки власник проєкту може змінювати ролі учасників.");
+                return Result.Fail(ErrorType.Forbidden, "Тільки власник проєкту може змінювати ролі учасників.");
             }
 
             // 2. Свою роль змінювати не можна
             if (memberId == currentUserId)
             {
-                return this.FailWith(ErrorType.Validation, "Ви не можете змінювати власну роль.");
+                return Result.Fail(ErrorType.Validation, "Ви не можете змінювати власну роль.");
             }
 
             // 3. Owner передається лише через «Передати власність»
             if (newRole is not (ProjectRole.CoExecutor or ProjectRole.Reviewer))
             {
-                return this.FailWith(ErrorType.Validation, "Нова роль може бути лише Співвиконавець або Читач.");
+                return Result.Fail(ErrorType.Validation, "Нова роль може бути лише Співвиконавець або Читач.");
             }
 
             var oldRole = await this.projectRepository.GetMemberRoleAsync(projectId, memberId);
             if (oldRole is null)
             {
-                return this.FailWith(ErrorType.NotFound, "Учасника не знайдено у цьому проєкті.");
+                return Result.Fail(ErrorType.NotFound, "Учасника не знайдено у цьому проєкті.");
             }
 
             if (oldRole == ProjectRole.Owner)
             {
-                return this.FailWith(ErrorType.Validation, "Неможливо змінити роль власника проєкту.");
+                return Result.Fail(ErrorType.Validation, "Неможливо змінити роль власника проєкту.");
             }
 
             // 4. Роль та сама — базу не змінюємо
@@ -274,48 +223,36 @@ public class ProjectMemberService : BaseService, IProjectMemberService
                 newRole);
 
             return Result.Ok();
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час зміни ролі учасника {MemberId} у проєкті {ProjectId}", memberId, projectId);
-            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        });
     }
 
-    public async Task<Result> TransferOwnershipAsync(Guid projectId, Guid newOwnerId, Guid currentUserId)
+    public Task<Result> TransferOwnershipAsync(Guid projectId, Guid newOwnerId, Guid currentUserId)
     {
-        try
+        return this.ExecuteAsync("Передача власності проєкту", async () =>
         {
-            this.Logger.Information(
-                "Спроба передати власність проєкту {ProjectId} від {OldOwnerId} до {NewOwnerId}",
-                projectId,
-                currentUserId,
-                newOwnerId);
-
-            // 1. Перевірка: чи діє поточний Owner проєкту?
+            // 1. Діє поточний Owner проєкту
             var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
             if (currentRole != ProjectRole.Owner)
             {
-                return this.FailWith(ErrorType.Forbidden, "Тільки власник проєкту може передавати права власності.");
+                return Result.Fail(ErrorType.Forbidden, "Тільки власник проєкту може передавати права власності.");
             }
 
-            // 2. Перевірка: чи не передає він власність самому собі?
+            // 2. Не самому собі
             if (newOwnerId == currentUserId)
             {
-                return this.FailWith(ErrorType.Validation, "Ви не можете передати права власності самому собі.");
+                return Result.Fail(ErrorType.Validation, "Ви не можете передати права власності самому собі.");
             }
 
-            // 3. Перевірка: чи є новий власник уже учасником проєкту?
+            // 3. Новий власник уже є учасником проєкту
             var targetUserRole = await this.projectRepository.GetMemberRoleAsync(projectId, newOwnerId);
             if (targetUserRole == null)
             {
-                return this.FailWith(ErrorType.Validation, "Новий власник повинен бути учасником цього проєкту.");
+                return Result.Fail(ErrorType.Validation, "Новий власник повинен бути учасником цього проєкту.");
             }
 
-            // 4. Виконання атомарної транзакції в DAL
+            // 4. Атомарна транзакція в DAL
             await this.projectRepository.TransferOwnershipAsync(projectId, newOwnerId);
 
-            // 5. Логування у Seq згідно з вимогами документа №7
             this.Logger.Information(
                 "Власність проєкту {ProjectId} передано {OldOwnerId} → {NewOwnerId}",
                 projectId,
@@ -323,27 +260,17 @@ public class ProjectMemberService : BaseService, IProjectMemberService
                 newOwnerId);
 
             return Result.Ok();
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(
-                ex,
-                "Критична помилка під час передачі власності проєкту {ProjectId} від {OldOwnerId} до {NewOwnerId}",
-                projectId,
-                currentUserId,
-                newOwnerId);
-            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        });
     }
 
-    public async Task<Result<IReadOnlyList<ProjectMemberModel>>> GetTransferCandidatesAsync(Guid projectId, Guid currentUserId)
+    public Task<Result<IReadOnlyList<ProjectMemberModel>>> GetTransferCandidatesAsync(Guid projectId, Guid currentUserId)
     {
-        try
+        return this.ExecuteAsync("Отримання кандидатів на власність", async () =>
         {
             var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
             if (currentRole != ProjectRole.Owner)
             {
-                return this.FailWith<IReadOnlyList<ProjectMemberModel>>(
+                return Result.Fail<IReadOnlyList<ProjectMemberModel>>(
                     ErrorType.Forbidden,
                     "Тільки власник проєкту може переглядати кандидатів для передачі прав.");
             }
@@ -362,11 +289,6 @@ public class ProjectMemberService : BaseService, IProjectMemberService
                 .ToList();
 
             return Result.Ok(candidates);
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Помилка отримання учасників для передачі власності проєкту {ProjectId}", projectId);
-            return Result.Fail<IReadOnlyList<ProjectMemberModel>>(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        });
     }
 }

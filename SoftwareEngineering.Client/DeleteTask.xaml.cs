@@ -1,7 +1,6 @@
 ﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Services;
-using SoftwareEngineering.BLL.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -48,22 +47,15 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            try
+            var result = await _taskService.DeleteTaskByOwnerAsync(new TaskModel { Id = taskId }, userId);
+            if (result.IsFailure)
             {
-                var model = new TaskModel { Id = taskId };
-                await _taskService.DeleteTaskByOwnerAsync(model, userId);
+                SetError($"[ВІДХИЛЕНО]: {result.Error!.Message}");
+                return;
+            }
 
-                StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(166, 227, 161)); // Зелений
-                StatusTextBlock.Text = $"[УСПІХ UC 4]: Завдання {taskId} успішно видалено користувачем {userId}!";
-            }
-            catch (ValidationException valEx)
-            {
-                SetError($"[ВІДХИЛЕНО BLL ВАЛІДАЦІЄЮ]: {valEx.Message}");
-            }
-            catch (Exception ex)
-            {
-                SetError($"[СИСТЕМНА ПОМИЛКА]: {ex.Message}");
-            }
+            StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(166, 227, 161)); // Зелений
+            StatusTextBlock.Text = $"[УСПІХ UC 4]: Завдання {taskId} успішно видалено користувачем {userId}!";
         }
 
         // Use Case 5
@@ -85,17 +77,15 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            try
+            var result = await _taskService.DeleteTaskAsync(taskId, userId);
+            if (result.IsFailure)
             {
-                await _taskService.DeleteTaskAsync(taskId, userId);
+                SetError($"[ВІДМОВА (UC 5)]: {result.Error!.Message}");
+                return;
+            }
 
-                StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(166, 227, 161));
-                StatusTextBlock.Text = $"[УСПІХ UC 5]: Спільне завдання {taskId} успішно видалено власником {userId}!";
-            }
-            catch (Exception ex)
-            {
-                SetError($"[ВІДМОВА ДОСТУПУ (UC 5)]: {ex.Message}");
-            }
+            StatusTextBlock.Foreground = new SolidColorBrush(Color.FromRgb(166, 227, 161));
+            StatusTextBlock.Text = $"[УСПІХ UC 5]: Спільне завдання {taskId} успішно видалено власником {userId}!";
         }
 
         private void SetError(string message)

@@ -10,7 +10,6 @@ namespace SoftwareEngineering.BLL.Services;
 public class CategoryService : BaseService, ICategoryService
 {
     private const int MaxNameLength = 100;
-    private const string UnexpectedErrorMessage = "Сталася внутрішня помилка. Спробуйте ще раз.";
 
     private static readonly Regex ColorRegex = new("^#[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
 
@@ -148,53 +147,5 @@ public class CategoryService : BaseService, ICategoryService
             ColorHex = category.ColorHex,
             TasksCount = category.Tasks.Count,
         };
-    }
-
-    private async Task<Result<T>> ExecuteAsync<T>(string actionName, Func<Task<Result<T>>> action)
-    {
-        try
-        {
-            this.Logger.Information("Початок виконання дії: {ActionName}", actionName);
-            var result = await action();
-            this.LogOutcome(actionName, result);
-
-            return result;
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час виконання дії: {ActionName}", actionName);
-
-            return Result.Fail<T>(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
-    }
-
-    private async Task<Result> ExecuteAsync(string actionName, Func<Task<Result>> action)
-    {
-        try
-        {
-            this.Logger.Information("Початок виконання дії: {ActionName}", actionName);
-            var result = await action();
-            this.LogOutcome(actionName, result);
-
-            return result;
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час виконання дії: {ActionName}", actionName);
-
-            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
-    }
-
-    private void LogOutcome(string actionName, Result result)
-    {
-        if (result.IsFailure)
-        {
-            this.Logger.Warning("Дію {ActionName} відхилено ({ErrorType}): {ErrorMessage}", actionName, result.Error!.Type, result.Error.Message);
-        }
-        else
-        {
-            this.Logger.Information("Успішно виконано дію: {ActionName}", actionName);
-        }
     }
 }

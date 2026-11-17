@@ -85,14 +85,12 @@ public partial class DatabaseSetupWindow : Window {
             model.Name = $"{model.Database.Trim()} @ {model.Host.Trim()}";
         }
 
-        try {
-            _dbService.SaveConnection(model);
-            SavedConnection = model;
-            DialogResult = true;
+        if (_dbService.SaveConnection(model).ShowIfFailed("Підключення не збережено")) {
+            return;
         }
-        catch (Exception ex) {
-            MessageBox.Show($"Не вдалося зберегти підключення: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+
+        SavedConnection = model;
+        DialogResult = true;
     }
 
     private void SetBusy(bool isBusy) {

@@ -11,8 +11,6 @@ public class CommentService : BaseService, ICommentService
 {
     public const int MaxContentLength = 1000;
 
-    private const string UnexpectedErrorMessage = "Сталася внутрішня помилка. Спробуйте ще раз.";
-
     private readonly ICommentRepository commentRepository;
     private readonly ITaskRepository taskRepository;
     private readonly IProjectRepository projectRepository;
@@ -24,19 +22,19 @@ public class CommentService : BaseService, ICommentService
         this.projectRepository = projectRepository;
     }
 
-    public async Task<Result<IReadOnlyList<CommentModel>>> GetByTaskAsync(Guid taskId, Guid currentUserId)
+    public Task<Result<IReadOnlyList<CommentModel>>> GetByTaskAsync(Guid taskId, Guid currentUserId)
     {
-        try
+        return this.ExecuteAsync("Отримання коментарів", async () =>
         {
             var access = await this.GetAccessAsync(taskId, currentUserId);
             if (access.Error is { } error)
             {
-                return this.Fail<IReadOnlyList<CommentModel>>(error.Type, error.Message);
+                return Result.Fail<IReadOnlyList<CommentModel>>(error.Type, error.Message);
             }
 
             if (!access.CanParticipate)
             {
-                return this.Fail<IReadOnlyList<CommentModel>>(ErrorType.Forbidden, "Переглядати коментарі можуть лише учасники проєкту.");
+                return Result.Fail<IReadOnlyList<CommentModel>>(ErrorType.Forbidden, "Переглядати коментарі можуть лише учасники проєкту.");
             }
 
             var comments = await this.commentRepository.GetByTaskIdAsync(taskId);
@@ -53,40 +51,33 @@ public class CommentService : BaseService, ICommentService
                 .ToList();
 
             return Result.Ok(models);
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час отримання коментарів завдання {TaskId}", taskId);
-            return Result.Fail<IReadOnlyList<CommentModel>>(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        });
     }
 
-    public async Task<Result<CommentModel>> AddAsync(Guid taskId, string content, Guid currentUserId)
+    public Task<Result<CommentModel>> AddAsync(Guid taskId, string content, Guid currentUserId)
     {
-        try
+        return this.ExecuteAsync("Додавання коментаря", async () =>
         {
-            this.Logger.Information("Спроба додати коментар до завдання {TaskId} користувачем {UserId}", taskId, currentUserId);
-
             var trimmedContent = content?.Trim() ?? string.Empty;
             if (trimmedContent.Length == 0)
             {
-                return this.Fail<CommentModel>(ErrorType.Validation, "Коментар не може бути порожнім.");
+                return Result.Fail<CommentModel>(ErrorType.Validation, "Коментар не може бути порожнім.");
             }
 
             if (trimmedContent.Length > MaxContentLength)
             {
-                return this.Fail<CommentModel>(ErrorType.Validation, $"Коментар не може перевищувати {MaxContentLength} символів.");
+                return Result.Fail<CommentModel>(ErrorType.Validation, $"Коментар не може перевищувати {MaxContentLength} символів.");
             }
 
             var access = await this.GetAccessAsync(taskId, currentUserId);
             if (access.Error is { } error)
             {
-                return this.Fail<CommentModel>(error.Type, error.Message);
+                return Result.Fail<CommentModel>(error.Type, error.Message);
             }
 
             if (!access.CanParticipate)
             {
-                return this.Fail<CommentModel>(ErrorType.Forbidden, "Коментувати завдання можуть лише учасники проєкту.");
+                return Result.Fail<CommentModel>(ErrorType.Forbidden, "Коментувати завдання можуть лише учасники проєкту.");
             }
 
             var comment = new Comment
@@ -102,50 +93,40 @@ public class CommentService : BaseService, ICommentService
             this.Logger.Information("Користувач {UserId} прокоментував завдання {TaskId} (коментар {CommentId})", currentUserId, taskId, comment.Id);
 
             return Result.Ok(ToModel(comment, null, access.Role, currentUserId, access.IsProjectOwner));
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час додавання коментаря до завдання {TaskId}", taskId);
-            return Result.Fail<CommentModel>(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        });
     }
 
-    public async Task<Result> DeleteAsync(Guid commentId, Guid currentUserId)
+    public Task<Result> DeleteAsync(Guid commentId, Guid currentUserId)
     {
-        try
+        return this.ExecuteAsync("Видалення коментаря", async () =>
         {
             if (commentId == Guid.Empty || currentUserId == Guid.Empty)
             {
-                return this.Fail(ErrorType.Validation, "Не вказано коментар або користувача.");
+                return Result.Fail(ErrorType.Validation, "Не вказано коментар або користувача.");
             }
 
             var comment = await this.commentRepository.GetByIdAsync(commentId);
             if (comment is null)
             {
-                return this.Fail(ErrorType.NotFound, "Коментар не знайдено. Можливо, його вже видалили.");
+                return Result.Fail(ErrorType.NotFound, "Коментар не знайдено. Можливо, його вже видалили.");
             }
 
             var access = await this.GetAccessAsync(comment.TaskId, currentUserId);
             if (access.Error is { } error)
             {
-                return this.Fail(error.Type, error.Message);
+                return Result.Fail(error.Type, error.Message);
             }
 
             if (comment.AuthorId != currentUserId && !access.IsProjectOwner)
             {
-                return this.Fail(ErrorType.Forbidden, "Видалити коментар може лише його автор або власник проєкту.");
+                return Result.Fail(ErrorType.Forbidden, "Видалити коментар може лише його автор або власник проєкту.");
             }
 
             await this.commentRepository.DeleteAsync(commentId);
             this.Logger.Information("Користувач {UserId} видалив коментар {CommentId} завдання {TaskId}", currentUserId, commentId, comment.TaskId);
 
             return Result.Ok();
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час видалення коментаря {CommentId}", commentId);
-            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        });
     }
 
     private static CommentModel ToModel(Comment comment, string? authorName, ProjectRole? authorRole, Guid currentUserId, bool isProjectOwner)
@@ -183,18 +164,6 @@ public class CommentService : BaseService, ICommentService
         var canParticipate = role != null || task.OwnerId == userId || task.AssigneeId == userId;
 
         return new TaskAccess(task.ProjectId, role, canParticipate, role == ProjectRole.Owner, null);
-    }
-
-    private Result<T> Fail<T>(ErrorType type, string message)
-    {
-        this.Logger.Warning("Дію з коментарем відхилено ({ErrorType}): {ErrorMessage}", type, message);
-        return Result.Fail<T>(type, message);
-    }
-
-    private Result Fail(ErrorType type, string message)
-    {
-        this.Logger.Warning("Дію з коментарем відхилено ({ErrorType}): {ErrorMessage}", type, message);
-        return Result.Fail(type, message);
     }
 
     private sealed record TaskAccess(Guid ProjectId, ProjectRole? Role, bool CanParticipate, bool IsProjectOwner, Error? Error)
