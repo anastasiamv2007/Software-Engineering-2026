@@ -11,4 +11,14 @@ public interface IProjectMemberService : IService
     Task<Result> AddCoExecutorAsync(Guid projectId, string email, Guid currentUserId);
     Task<Result<IReadOnlyList<ProjectMemberModel>>> GetMembersAsync(Guid projectId, Guid currentUserId);
     Task<Result> RemoveMemberAsync(Guid projectId, Guid memberId, Guid currentUserId);
+
+    /// <summary>
+    /// Передає власність іншому учаснику; колишній власник стає співвиконавцем. Лише для Owner.
+    /// </summary>
+    Task<Result> TransferOwnershipAsync(Guid projectId, Guid newOwnerId, Guid currentUserId);
+
+    /// <summary>
+    /// Учасники, яким Owner може передати власність (усі, крім нього самого).
+    /// </summary>
+    Task<Result<IReadOnlyList<ProjectMemberModel>>> GetTransferCandidatesAsync(Guid projectId, Guid currentUserId);
 }

@@ -107,8 +107,12 @@
                     </ScrollViewer>
                 </StackPanel>
 
-                <!-- Кнопки збереження/видалення зміщено на 5-й рядок -->
+                <!-- Кнопки керування проєктом (лише для Owner) -->
                 <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="BtnTransferOwnership" Content="Передати власність" Width="155" Height="36" 
+                            Background="#D97706" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" 
+                            Click="BtnTransferOwnership_Click" Margin="0,0,10,0"/>
+
                     <Button x:Name="BtnDelete" Content="Видалити" Width="100" Height="36" 
                             Background="#E74C3C" Foreground="White" BorderThickness="0" Cursor="Hand" 
                             Click="BtnDelete_Click" Margin="0,0,10,0"/>

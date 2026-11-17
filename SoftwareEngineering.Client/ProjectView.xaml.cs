@@ -75,6 +75,7 @@ public partial class ProjectsView : UserControl
             var ownerOnly = isOwner ? Visibility.Visible : Visibility.Collapsed;
 
             TxtProjectName.IsReadOnly = !isOwner;
+            BtnTransferOwnership.Visibility = ownerOnly;
             BtnSave.Visibility = ownerOnly;
             BtnDelete.Visibility = ownerOnly;
             CoExecutorPanel.Visibility = ownerOnly;
@@ -98,6 +99,7 @@ public partial class ProjectsView : UserControl
         TxtCreatedAt.Text = DateTime.Now.ToString("dd.MM.yyyy HH:mm");
 
         TxtProjectName.IsReadOnly = false;
+        BtnTransferOwnership.Visibility = Visibility.Collapsed;
         BtnSave.Visibility = Visibility.Visible;
         BtnDelete.Visibility = Visibility.Collapsed;
 
@@ -256,4 +258,54 @@ public partial class ProjectsView : UserControl
         await LoadMembersAsync(_selectedProject.Id, true);
     }
 
+    private async void BtnTransferOwnership_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedProject == null) return;
+
+        var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
+        var candidatesResult = await _projectMemberService.GetTransferCandidatesAsync(_selectedProject.Id, currentUserId);
+
+        if (candidatesResult.IsFailure)
+        {
+            MessageBox.Show(candidatesResult.Error?.Message ?? "Не вдалося отримати список учасників.", "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var candidates = candidatesResult.Value!;
+        if (candidates.Count == 0)
+        {
+            MessageBox.Show(
+                "У проєкті поки немає інших учасників. Спочатку додайте хоча б одного співвиконавця за email.",
+                "Немає кандидатів",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new TransferOwnershipWindow(
+            _projectMemberService,
+            _selectedProject.Id,
+            _selectedProject.Name,
+            currentUserId,
+            candidates)
+        {
+            Owner = Window.GetWindow(this)
+        };
+
+        if (dialog.ShowDialog() == true && dialog.IsTransferred)
+        {
+            var transferredProjectId = _selectedProject.Id;
+
+            await LoadProjectsAsync();
+
+            var updatedProject = LstProjects.Items
+                .OfType<ProjectModel>()
+                .FirstOrDefault(p => p.Id == transferredProjectId);
+
+            if (updatedProject != null)
+            {
+                LstProjects.SelectedItem = updatedProject;
+            }
+        }
+    }
 }

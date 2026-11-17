@@ -201,7 +201,7 @@ public class ProjectMemberService : BaseService, IProjectMemberService
 
     private Result FailWith(ErrorType type, string message)
     {
-        this.Logger.Warning("Видалення учасника відхилено ({ErrorType}): {ErrorMessage}", type, message);
+        this.Logger.Warning("Операцію з учасниками відхилено ({ErrorType}): {ErrorMessage}", type, message);
         return Result.Fail(type, message);
     }
 
@@ -215,5 +215,93 @@ public class ProjectMemberService : BaseService, IProjectMemberService
     {
         this.Logger.Warning("Додавання співвиконавця відхилено ({ErrorType}): {ErrorMessage}", type, message);
         return Result.Fail(type, message);
+    }
+
+    public async Task<Result> TransferOwnershipAsync(Guid projectId, Guid newOwnerId, Guid currentUserId)
+    {
+        try
+        {
+            this.Logger.Information(
+                "Спроба передати власність проєкту {ProjectId} від {OldOwnerId} до {NewOwnerId}",
+                projectId,
+                currentUserId,
+                newOwnerId);
+
+            // 1. Перевірка: чи діє поточний Owner проєкту?
+            var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
+            if (currentRole != ProjectRole.Owner)
+            {
+                return this.FailWith(ErrorType.Forbidden, "Тільки власник проєкту може передавати права власності.");
+            }
+
+            // 2. Перевірка: чи не передає він власність самому собі?
+            if (newOwnerId == currentUserId)
+            {
+                return this.FailWith(ErrorType.Validation, "Ви не можете передати права власності самому собі.");
+            }
+
+            // 3. Перевірка: чи є новий власник уже учасником проєкту?
+            var targetUserRole = await this.projectRepository.GetMemberRoleAsync(projectId, newOwnerId);
+            if (targetUserRole == null)
+            {
+                return this.FailWith(ErrorType.Validation, "Новий власник повинен бути учасником цього проєкту.");
+            }
+
+            // 4. Виконання атомарної транзакції в DAL
+            await this.projectRepository.TransferOwnershipAsync(projectId, newOwnerId);
+
+            // 5. Логування у Seq згідно з вимогами документа №7
+            this.Logger.Information(
+                "Власність проєкту {ProjectId} передано {OldOwnerId} → {NewOwnerId}",
+                projectId,
+                currentUserId,
+                newOwnerId);
+
+            return Result.Ok();
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(
+                ex,
+                "Критична помилка під час передачі власності проєкту {ProjectId} від {OldOwnerId} до {NewOwnerId}",
+                projectId,
+                currentUserId,
+                newOwnerId);
+            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<ProjectMemberModel>>> GetTransferCandidatesAsync(Guid projectId, Guid currentUserId)
+    {
+        try
+        {
+            var currentRole = await this.projectRepository.GetMemberRoleAsync(projectId, currentUserId);
+            if (currentRole != ProjectRole.Owner)
+            {
+                return this.FailWith<IReadOnlyList<ProjectMemberModel>>(
+                    ErrorType.Forbidden,
+                    "Тільки власник проєкту може переглядати кандидатів для передачі прав.");
+            }
+
+            // Той самий список учасників, що й на сторінці проєкту, але без самого власника
+            var members = await this.projectRepository.GetMembersAsync(projectId);
+            IReadOnlyList<ProjectMemberModel> candidates = members
+                .Where(member => member.UserId != currentUserId)
+                .Select(member => new ProjectMemberModel
+                {
+                    UserId = member.UserId,
+                    FullName = string.IsNullOrWhiteSpace(member.User.FullName) ? member.User.Email : member.User.FullName,
+                    Email = member.User.Email,
+                    Role = member.Role,
+                })
+                .ToList();
+
+            return Result.Ok(candidates);
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(ex, "Помилка отримання учасників для передачі власності проєкту {ProjectId}", projectId);
+            return Result.Fail<IReadOnlyList<ProjectMemberModel>>(ErrorType.Unexpected, UnexpectedErrorMessage);
+        }
     }
 }
