@@ -1,5 +1,4 @@
-﻿using SoftwareEngineering.BLL.Exceptions;
-using SoftwareEngineering.BLL.Interfaces;
+﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.DAL.Enums;
 using System.Windows;
@@ -25,44 +24,39 @@ namespace SoftwareEngineering.Client
 
         private async void CreateButton_Click(object sender, RoutedEventArgs e)
         {
-            try
+            var priority = TaskPriority.Medium;
+            if (PriorityComboBox.SelectedItem is ComboBoxItem selectedItem &&
+                selectedItem.Tag is TaskPriority parsedPriority)
             {
-                var priority = TaskPriority.Medium;
-                if (PriorityComboBox.SelectedItem is ComboBoxItem selectedItem &&
-                    selectedItem.Tag is TaskPriority parsedPriority)
-                {
-                    priority = parsedPriority;
-                }
-
-                var ownerId = userSession.CurrentUserId ?? Guid.Empty;
-                var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty, ownerId);
-
-                var taskModel = new TaskModel
-                {
-                    ProjectId = project.Id,
-                    OwnerId = ownerId,
-                    Title = TitleTextBox.Text?.Trim() ?? string.Empty,
-                    Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
-                    Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
-                    Priority = priority,
-                    Status = TaskItemStatus.Todo
-                };
-
-                await taskService.CreateAsync(taskModel);
-
-                MessageBox.Show("Завдання успішно створено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                DialogResult = true;
-                Close();
+                priority = parsedPriority;
             }
-            catch (ValidationException ex)
+
+            var ownerId = userSession.CurrentUserId ?? Guid.Empty;
+            var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty, ownerId);
+            if (project.ShowIfFailed("Завдання не створено"))
             {
-                MessageBox.Show(ex.Message, "Помилка валідації", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
-            catch (Exception ex)
+
+            var created = await taskService.CreateAsync(new TaskModel
             {
-                MessageBox.Show($"Сталася помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ProjectId = project.Value!.Id,
+                OwnerId = ownerId,
+                Title = TitleTextBox.Text?.Trim() ?? string.Empty,
+                Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
+                Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
+                Priority = priority,
+                Status = TaskItemStatus.Todo
+            });
+            if (created.ShowIfFailed("Завдання не створено"))
+            {
+                return;
             }
+
+            MessageBox.Show("Завдання успішно створено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            DialogResult = true;
+            Close();
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)

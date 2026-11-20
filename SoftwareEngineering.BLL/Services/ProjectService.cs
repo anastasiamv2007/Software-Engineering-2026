@@ -1,5 +1,6 @@
 ﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.DAL.Entities;
 using SoftwareEngineering.DAL.Enums;
 using SoftwareEngineering.DAL.Repositories;
@@ -18,123 +19,184 @@ public class ProjectService : BaseService, IProjectService
         this.projectRepository = projectRepository;
     }
 
-    public async Task<IEnumerable<ProjectModel>> GetUserProjectsAsync(Guid userId)
+    public Task<Result<IReadOnlyList<ProjectModel>>> GetUserProjectsAsync(Guid userId)
     {
-        return await this.ExecuteWithLoggingAsync("Отримання проєктів користувача", async () =>
+        return this.ExecuteAsync("Отримання проєктів користувача", async () =>
         {
+            if (userId == Guid.Empty)
+            {
+                return Result.Fail<IReadOnlyList<ProjectModel>>(ErrorType.Validation, "Ідентифікатор користувача не вказано.");
+            }
+
             var projects = await this.projectRepository.GetAllByUserIdAsync(userId);
-            return projects.Select(ToModel);
+            IReadOnlyList<ProjectModel> models = projects.Select(ToModel).ToList();
+            return Result.Ok(models);
         });
     }
 
-    public async Task<ProjectModel?> GetByIdAsync(Guid id)
+    public Task<Result<ProjectModel>> GetByIdAsync(Guid id)
     {
-        return await this.ExecuteWithLoggingAsync("Отримання проєкту за ID", async () =>
+        return this.ExecuteAsync("Отримання проєкту за ID", async () =>
         {
             var project = await this.projectRepository.GetByIdAsync(id);
-            return project != null ? ToModel(project) : null;
+            return project is null
+                ? Result.Fail<ProjectModel>(ErrorType.NotFound, "Проєкт не знайдено.")
+                : Result.Ok(ToModel(project));
         });
     }
 
-    public async Task<ProjectModel> CreateProjectAsync(CreateProjectModel model, Guid currentUserId)
+    public Task<Result<ProjectModel>> CreateProjectAsync(CreateProjectModel model, Guid currentUserId)
     {
-        return await this.ExecuteWithLoggingAsync("Створення проєкту", async () =>
+        return this.ExecuteAsync("Створення проєкту", async () =>
         {
-            this.ValidateNotEmpty(model.Name, "Назва проєкту");
+            if (model is null)
+            {
+                return Result.Fail<ProjectModel>(ErrorType.Validation, "Дані проєкту не передано.");
+            }
+
+            var nameError = ValidateName(model.Name);
+            if (nameError is not null)
+            {
+                return Result.Fail<ProjectModel>(ErrorType.Validation, nameError);
+            }
+
             var trimmedName = model.Name.Trim();
-            this.ValidateCondition(trimmedName.Length <= MaxNameLength, "Назва проєкту занадто довга.");
+            var ownerId = model.OwnerId ?? currentUserId;
+            if (ownerId == Guid.Empty)
+            {
+                return Result.Fail<ProjectModel>(ErrorType.Validation, "Не вказано власника проєкту.");
+            }
 
             var existing = await this.projectRepository.FindByNameAsync(trimmedName);
-            this.ValidateCondition(existing == null, "Проєкт з такою назвою вже існує.");
-
-            var ownerId = model.OwnerId ?? currentUserId;
-            this.ValidateCondition(ownerId != Guid.Empty, "Не вказано власника проєкту.");
-
-            var project = new Project
+            if (existing is not null)
             {
-                Id = Guid.NewGuid(),
-                Name = trimmedName,
-                OwnerId = ownerId,
-                CreatedAt = DateTime.UtcNow
-            };
+                return Result.Fail<ProjectModel>(ErrorType.Duplicate, "Проєкт з такою назвою вже існує.");
+            }
 
-            // Автор проєкту одразу стає його учасником з роллю Owner
-            project.Members.Add(new ProjectMember { UserId = ownerId, Role = ProjectRole.Owner });
-
-            await this.projectRepository.AddAsync(project);
-            this.Logger.Information("Створено новий проєкт {ProjectName} ({ProjectId})", project.Name, project.Id);
-
-            return ToModel(project);
+            var project = await this.AddProjectAsync(trimmedName, ownerId);
+            return Result.Ok(ToModel(project));
         });
     }
 
-    public async Task UpdateProjectAsync(UpdateProjectModel model, Guid currentUserId)
+    public Task<Result> UpdateProjectAsync(UpdateProjectModel model, Guid currentUserId)
     {
-        await this.ExecuteWithLoggingAsync("Оновлення проєкту", async () =>
+        return this.ExecuteAsync("Оновлення проєкту", async () =>
         {
-            this.ValidateNotEmpty(model.Name, "Назва проєкту");
-            var trimmedName = model.Name.Trim();
-            this.ValidateCondition(trimmedName.Length <= MaxNameLength, "Назва проєкту занадто довга.");
+            if (model is null)
+            {
+                return Result.Fail(ErrorType.Validation, "Дані проєкту не передано.");
+            }
+
+            var nameError = ValidateName(model.Name);
+            if (nameError is not null)
+            {
+                return Result.Fail(ErrorType.Validation, nameError);
+            }
 
             var project = await this.projectRepository.GetByIdAsync(model.Id);
-            this.ValidateCondition(project != null, "Проєкт не знайдено.");
-            this.ValidateCondition(project!.OwnerId == currentUserId, "Редагувати проєкт може лише його власник.");
+            if (project is null)
+            {
+                return Result.Fail(ErrorType.NotFound, "Проєкт не знайдено.");
+            }
+
+            if (project.OwnerId != currentUserId)
+            {
+                return Result.Fail(ErrorType.Forbidden, "Редагувати проєкт може лише його власник.");
+            }
+
+            var trimmedName = model.Name.Trim();
+
+            // Інший проєкт з такою назвою — дубль (свою ж назву можна лишити без змін)
+            var sameName = await this.projectRepository.FindByNameAsync(trimmedName);
+            if (sameName is not null && sameName.Id != project.Id)
+            {
+                return Result.Fail(ErrorType.Duplicate, "Проєкт з такою назвою вже існує.");
+            }
 
             project.Name = trimmedName;
             await this.projectRepository.UpdateAsync(project);
 
             this.Logger.Information("Оновлено проєкт {ProjectId}: нова назва {ProjectName}", model.Id, trimmedName);
-            return true;
+            return Result.Ok();
         });
     }
 
-    public async Task DeleteProjectAsync(Guid id, Guid currentUserId)
+    public Task<Result> DeleteProjectAsync(Guid id, Guid currentUserId)
     {
-        await this.ExecuteWithLoggingAsync("Видалення проєкту", async () =>
+        return this.ExecuteAsync("Видалення проєкту", async () =>
         {
             var project = await this.projectRepository.GetByIdAsync(id);
-            this.ValidateCondition(project != null, "Проєкт не знайдено.");
+            if (project is null)
+            {
+                return Result.Fail(ErrorType.NotFound, "Проєкт не знайдено.");
+            }
 
             // Видалення каскадно прибирає всі завдання проєкту, тому дозволено лише власнику
-            this.ValidateCondition(project!.OwnerId == currentUserId, "Видалити проєкт може лише його власник.");
+            if (project.OwnerId != currentUserId)
+            {
+                return Result.Fail(ErrorType.Forbidden, "Видалити проєкт може лише його власник.");
+            }
 
             await this.projectRepository.DeleteAsync(id);
-            this.Logger.Information("Видалено проєкт {ProjectId}", id);
-            return true;
+            this.Logger.Information("Користувач {UserId} видалив проєкт {ProjectId}", currentUserId, id);
+            return Result.Ok();
         });
     }
 
-    public async Task<ProjectModel> GetOrCreateByNameAsync(string name, Guid ownerId)
+    public Task<Result<ProjectModel>> GetOrCreateByNameAsync(string name, Guid ownerId)
     {
-        return await this.ExecuteWithLoggingAsync("Отримання або створення проєкту", async () =>
+        return this.ExecuteAsync("Отримання або створення проєкту", async () =>
         {
-            this.ValidateNotEmpty(name, "Проєкт");
-            var trimmedName = name.Trim();
-            this.ValidateCondition(trimmedName.Length <= MaxNameLength, "Назва проєкту занадто довга.");
-            this.ValidateCondition(ownerId != Guid.Empty, "Не вказано власника проєкту.");
-
-            var existing = await this.projectRepository.FindByNameAsync(trimmedName);
-            if (existing != null)
+            var nameError = ValidateName(name);
+            if (nameError is not null)
             {
-                return ToModel(existing);
+                return Result.Fail<ProjectModel>(ErrorType.Validation, nameError);
             }
 
-            var project = new Project
+            if (ownerId == Guid.Empty)
             {
-                Id = Guid.NewGuid(),
-                Name = trimmedName,
-                OwnerId = ownerId,
-                CreatedAt = DateTime.UtcNow,
-            };
+                return Result.Fail<ProjectModel>(ErrorType.Validation, "Не вказано власника проєкту.");
+            }
 
-            // Автор проєкту одразу стає його учасником з роллю Owner
-            project.Members.Add(new ProjectMember { UserId = ownerId, Role = ProjectRole.Owner });
+            var trimmedName = name.Trim();
+            var existing = await this.projectRepository.FindByNameAsync(trimmedName);
+            if (existing is not null)
+            {
+                return Result.Ok(ToModel(existing));
+            }
 
-            await this.projectRepository.AddAsync(project);
-            this.Logger.Information("Створено проєкт {ProjectName} ({ProjectId})", project.Name, project.Id);
-
-            return ToModel(project);
+            var project = await this.AddProjectAsync(trimmedName, ownerId);
+            return Result.Ok(ToModel(project));
         });
+    }
+
+    private static string? ValidateName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "Назва проєкту не може бути порожньою.";
+        }
+
+        return name.Trim().Length > MaxNameLength ? "Назва проєкту занадто довга." : null;
+    }
+
+    private async Task<Project> AddProjectAsync(string name, Guid ownerId)
+    {
+        var project = new Project
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            OwnerId = ownerId,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        // Автор проєкту одразу стає його учасником з роллю Owner
+        project.Members.Add(new ProjectMember { UserId = ownerId, Role = ProjectRole.Owner });
+
+        await this.projectRepository.AddAsync(project);
+        this.Logger.Information("Створено проєкт {ProjectName} ({ProjectId}) власником {UserId}", project.Name, project.Id, ownerId);
+
+        return project;
     }
 
     private static ProjectModel ToModel(Project project)

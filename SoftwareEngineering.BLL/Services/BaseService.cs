@@ -1,62 +1,69 @@
-﻿using System;
-using System.Threading.Tasks;
-using Serilog;
-using SoftwareEngineering.BLL.Exceptions;
+﻿using Serilog;
+using SoftwareEngineering.BLL.Results;
 
 namespace SoftwareEngineering.BLL.Services;
 
 /// <summary>
-/// Базовий клас для сервісів BLL, що стандартизує логування дій користувача, помилок та валідацію.
+/// Базовий клас сервісів BLL. Єдине місце, де сервіси перехоплюють винятки:
+/// очікувані помилки (валідація, права, «не знайдено») методи повертають як Result.Fail,
+/// а непередбачені (наприклад, недоступна БД) ExecuteAsync перетворює на ErrorType.Unexpected.
 /// </summary>
 public abstract class BaseService
 {
+    protected const string UnexpectedErrorMessage = "Сталася внутрішня помилка. Спробуйте ще раз.";
+
     protected ILogger Logger => Log.ForContext(this.GetType());
 
     /// <summary>
-    /// Перевіряє, що текстове поле не є порожнім.
+    /// Виконує дію сервісу: логує результат у Seq і не випускає винятки назовні.
     /// </summary>
-    protected void ValidateNotEmpty(string? value, string fieldName)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            var message = $"Поле '{fieldName}' не може бути порожнім.";
-            this.Logger.Warning("Помилка валідації: {Message}", message);
-            throw new ValidationException(message);
-        }
-    }
-
-    /// <summary>
-    /// Перевіряє довільну бізнес-умову. Якщо умова хибна — логує попередження і викидає ValidationException.
-    /// </summary>
-    protected void ValidateCondition(bool condition, string errorMessage)
-    {
-        if (!condition)
-        {
-            this.Logger.Warning("Помилка валідації бізнес-правила: {ErrorMessage}", errorMessage);
-            throw new ValidationException(errorMessage);
-        }
-    }
-
-    /// <summary>
-    /// Виконує асинхронну дію сервісу з автоматичним логуванням початку, успішного завершення та помилок.
-    /// </summary>
-    protected async Task<T> ExecuteWithLoggingAsync<T>(string actionName, Func<Task<T>> action)
+    protected async Task<Result<T>> ExecuteAsync<T>(string actionName, Func<Task<Result<T>>> action)
     {
         try
         {
-            this.Logger.Information("Початок виконання дії: {ActionName}", actionName);
+            this.Logger.Debug("Початок виконання дії: {ActionName}", actionName);
             var result = await action();
-            this.Logger.Information("Успішно виконано дію: {ActionName}", actionName);
+            this.LogOutcome(actionName, result);
             return result;
-        }
-        catch (ValidationException)
-        {
-            throw;
         }
         catch (Exception ex)
         {
             this.Logger.Error(ex, "Критична помилка під час виконання дії: {ActionName}", actionName);
-            throw;
+            return Result.Fail<T>(ErrorType.Unexpected, UnexpectedErrorMessage);
+        }
+    }
+
+    /// <inheritdoc cref="ExecuteAsync{T}(string, Func{Task{Result{T}}})"/>
+    protected async Task<Result> ExecuteAsync(string actionName, Func<Task<Result>> action)
+    {
+        try
+        {
+            this.Logger.Debug("Початок виконання дії: {ActionName}", actionName);
+            var result = await action();
+            this.LogOutcome(actionName, result);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            this.Logger.Error(ex, "Критична помилка під час виконання дії: {ActionName}", actionName);
+            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
+        }
+    }
+
+    // Відмова (валідація, права, «не знайдено») — Warning з типом і текстом, щоб у Seq було видно причину
+    private void LogOutcome(string actionName, Result result)
+    {
+        if (result.IsFailure)
+        {
+            this.Logger.Warning(
+                "Дію {ActionName} відхилено ({ErrorType}): {ErrorMessage}",
+                actionName,
+                result.Error!.Type,
+                result.Error.Message);
+        }
+        else
+        {
+            this.Logger.Information("Успішно виконано дію: {ActionName}", actionName);
         }
     }
 }

@@ -156,40 +156,38 @@ public partial class DatabaseSelectionWindow : Window
         string connectionString = connection.BuildConnectionString();
         Log.Information("Підключення до збереженої БД {ConnectionName} ({Summary})", connection.DisplayName, connection.Summary);
 
-        try
+        SetBusy(true, $"Підключення до «{connection.DisplayName}»...");
+
+        if (!await dbService.TestConnectionAsync(connectionString))
         {
-            SetBusy(true, $"Підключення до «{connection.DisplayName}»...");
-
-            if (!await dbService.TestConnectionAsync(connectionString))
-            {
-                SetBusy(false, "Не вдалося підключитися. Перевірте хост, порт і логін/пароль (кнопка «Редагувати»).");
-                return;
-            }
-
-            SetBusy(true, "Перевірка структури бази (міграції)...");
-            await dbService.ApplyMigrationsAsync(connectionString);
-            dbService.MarkAsUsed(connection.Id);
-
-            var app = (App)Application.Current;
-            app.ConfigureServices(connectionString, connection.Id);
-
-            if (connection.HasRememberedSession)
-            {
-                SetBusy(true, "Вхід за збереженою сесією...");
-            }
-
-            // Збережений для цієї бази вхід відкриває програму одразу, інакше — вікно логіну
-            Window next = await app.TryRestoreSessionAsync()
-                ? app.GetService<MainWindow>()
-                : app.GetService<LoginWindow>();
-            next.Show();
-            Close();
+            SetBusy(false, "Не вдалося підключитися. Перевірте хост, порт і логін/пароль (кнопка «Редагувати»).");
+            return;
         }
-        catch (Exception ex)
+
+        SetBusy(true, "Перевірка структури бази (міграції)...");
+        var migrated = await dbService.ApplyMigrationsAsync(connectionString);
+        if (migrated.IsFailure)
         {
-            Log.Error(ex, "Не вдалося ініціалізувати підключення {ConnectionName}", connection.DisplayName);
-            SetBusy(false, string.Empty);
-            MessageBox.Show($"Помилка ініціалізації бази даних: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
+            // Повідомлення — у рядку стану вікна, причину з кодом SQL сервіс уже записав у Seq
+            SetBusy(false, migrated.Error!.Message);
+            return;
         }
+
+        dbService.MarkAsUsed(connection.Id);
+
+        var app = (App)Application.Current;
+        app.ConfigureServices(connectionString, connection.Id);
+
+        if (connection.HasRememberedSession)
+        {
+            SetBusy(true, "Вхід за збереженою сесією...");
+        }
+
+        // Збережений для цієї бази вхід відкриває програму одразу, інакше — вікно логіну
+        Window next = await app.TryRestoreSessionAsync()
+            ? app.GetService<MainWindow>()
+            : app.GetService<LoginWindow>();
+        next.Show();
+        Close();
     }
 }

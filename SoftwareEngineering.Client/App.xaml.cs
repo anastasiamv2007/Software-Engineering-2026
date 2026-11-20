@@ -4,6 +4,7 @@ using SoftwareEngineering.BLL;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Services;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace SoftwareEngineering.Client;
 
@@ -25,6 +26,7 @@ public partial class App : Application
     {
         base.OnStartup(e);
         ConfigureLogging();
+        RegisterGlobalExceptionHandlers();
 
         // Завжди починаємо з вибору бази: звідти вже відкривається вікно логіну
         ShowDatabaseSelection();
@@ -113,14 +115,15 @@ public partial class App : Application
             return false;
         }
 
-        var user = await GetService<IAuthService>().RestoreSessionAsync(remembered);
-        if (user == null)
+        var result = await GetService<IAuthService>().RestoreSessionAsync(remembered);
+        if (result.IsFailure)
         {
+            // Користувача видалено або пароль змінено — така сесія більше не знадобиться
             setupService.ForgetSession(connectionId);
             return false;
         }
 
-        GetService<IUserSession>().SetUser(user);
+        GetService<IUserSession>().SetUser(result.Value!);
         return true;
     }
 
@@ -134,23 +137,20 @@ public partial class App : Application
             return;
         }
 
-        try
+        if (!remember)
         {
-            if (remember)
-            {
-                var session = await GetService<IAuthService>().CreateRememberedSessionAsync(userId);
-                setupService.RememberSession(connectionId, session);
-            }
-            else
-            {
-                setupService.ForgetSession(connectionId);
-            }
+            setupService.ForgetSession(connectionId);
+            return;
         }
-        catch (Exception ex)
+
+        var session = await GetService<IAuthService>().CreateRememberedSessionAsync(userId);
+        if (session.IsFailure)
         {
-            // Вхід уже виконано — невдале збереження сесії не має його зривати
-            Log.Warning(ex, "Не вдалося оновити збережений вхід для підключення {ConnectionId}", connectionId);
+            return;
         }
+
+        // Вхід уже виконано: якщо зберегти не вдалося (причина вже в Seq), користувач просто увійде без «Запам'ятати мене»
+        setupService.RememberSession(connectionId, session.Value!);
     }
 
     private void ForgetCurrentSession()
@@ -178,6 +178,42 @@ public partial class App : Application
 
         Log.Logger = configuration.CreateLogger();
         Log.Information("Застосунок Planora запущено");
+    }
+
+    /// <summary>
+    /// Страховка для того, що проскочило повз Result (помилка в самому UI, баг):
+    /// пишемо в Seq і показуємо повідомлення замість аварійного закриття програми.
+    /// Звичайні помилки (валідація, права, недоступна БД) сюди не доходять — їх повертають сервіси.
+    /// </summary>
+    private void RegisterGlobalExceptionHandlers()
+    {
+        // Винятки в потоці UI, зокрема з async void обробників кнопок
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+
+        // Винятки у фонових потоках: програму вже не врятувати, але причина має потрапити в лог
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            Log.Fatal(args.ExceptionObject as Exception, "Необроблена помилка у фоновому потоці, програма завершується");
+
+        // Задачі, результат яких ніхто не дочекався (наприклад, _ = LoadAsync())
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log.Error(args.Exception, "Необроблена помилка у фоновій задачі");
+            args.SetObserved();
+        };
+    }
+
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        Log.Fatal(e.Exception, "Необроблена помилка в інтерфейсі: {ExceptionType}", e.Exception.GetType().Name);
+
+        MessageBox.Show(
+            "Сталася непередбачена помилка. Дію не виконано, але програма продовжить роботу.\nДеталі записано в журнал.",
+            "Помилка",
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
+
+        // Не даємо WPF закрити програму: стан даних у БД не постраждав, користувач може повторити дію
+        e.Handled = true;
     }
 
     private void ShowDatabaseSelection()

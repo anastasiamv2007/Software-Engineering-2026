@@ -84,7 +84,7 @@ public class TaskCodeTests
         var result = await service.CreateAsync(CreateValidModel());
 
         // Assert
-        Assert.Equal("PL-3", result.TaskCode);
+        Assert.Equal("PL-3", result.Value!.TaskCode);
         this.taskRepositoryMock.Verify(repository => repository.GetTaskCodesAsync(It.IsAny<Guid>()), Times.Exactly(2));
     }
 

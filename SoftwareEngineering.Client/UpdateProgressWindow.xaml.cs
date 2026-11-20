@@ -1,5 +1,4 @@
-﻿using SoftwareEngineering.BLL.Exceptions;
-using SoftwareEngineering.BLL.Interfaces;
+﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.DAL.Enums;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,33 +17,26 @@ namespace SoftwareEngineering.Client
 
         private async void UpdateButton_Click(object sender, RoutedEventArgs e)
         {
-            try
+            _ = Guid.TryParse(TaskIdTextBox.Text?.Trim(), out var taskId);
+            _ = Guid.TryParse(UserIdTextBox.Text?.Trim(), out var userId);
+
+            var status = TaskItemStatus.InProgress;
+            if (StatusComboBox.SelectedItem is ComboBoxItem selectedItem &&
+                selectedItem.Tag is TaskItemStatus parsedStatus)
             {
-                _ = Guid.TryParse(TaskIdTextBox.Text?.Trim(), out var taskId);
-                _ = Guid.TryParse(UserIdTextBox.Text?.Trim(), out var userId);
-
-                var status = TaskItemStatus.InProgress;
-                if (StatusComboBox.SelectedItem is ComboBoxItem selectedItem &&
-                    selectedItem.Tag is TaskItemStatus parsedStatus)
-                {
-                    status = parsedStatus;
-                }
-
-                await taskService.UpdateProgressAsync(taskId, status, userId);
-
-                MessageBox.Show("Прогрес успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                DialogResult = true;
-                Close();
+                status = parsedStatus;
             }
-            catch (ValidationException ex)
+
+            var result = await taskService.UpdateProgressAsync(taskId, status, userId);
+            if (result.ShowIfFailed("Прогрес не оновлено"))
             {
-                MessageBox.Show(ex.Message, "Помилка валідації", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Сталася помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+
+            MessageBox.Show("Прогрес успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            DialogResult = true;
+            Close();
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)
