@@ -20,6 +20,8 @@ public static class DependencyInjection
         services.AddScoped<ICommentService, CommentService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IProjectMemberService, ProjectMemberService>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<IStatisticsService, StatisticsService>();
         return services;
     }
 }
