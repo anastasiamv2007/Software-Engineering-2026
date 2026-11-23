@@ -21,6 +21,7 @@ namespace SoftwareEngineering.Client
         private readonly ICategoryService categoryService;
         private readonly ISubtaskService subtaskService;
         private readonly ICommentService commentService;
+        private readonly IReviewService reviewService;
         private Guid? detailsTaskId;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
@@ -31,7 +32,7 @@ namespace SoftwareEngineering.Client
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService, IReviewService reviewService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
@@ -40,6 +41,7 @@ namespace SoftwareEngineering.Client
             this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
             this.subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
             this.commentService = commentService ?? throw new ArgumentNullException(nameof(commentService));
+            this.reviewService = reviewService ?? throw new ArgumentNullException(nameof(reviewService));
 
             BuildCategoryPalette();
             StartCategoryCreateMode();
@@ -139,6 +141,11 @@ namespace SoftwareEngineering.Client
             if (page == "Projects")
             {
                 var projectsView = Page_Projects.Children.OfType<ProjectsView>().FirstOrDefault();
+            }
+
+            if (page == "Review")
+            {
+                _ = LoadReviewQueueAsync();
             }
         }
 
@@ -466,6 +473,12 @@ namespace SoftwareEngineering.Client
             DetailsSubtasksList.Tag = details.CanDeleteOrChangeDeadline ? Visibility.Visible : Visibility.Collapsed;
             NewSubtaskTitleTextBox.Clear();
             NewCommentTextBox.Clear();
+
+            var canSubmitForReview =
+                (details.CurrentUserRole is ProjectRole.Owner or ProjectRole.CoExecutor || task.AssigneeId == CurrentUserId) &&
+                task.Status is TaskItemStatus.Todo or TaskItemStatus.InProgress or TaskItemStatus.NeedsRevision;
+
+            DetailsSubmitReviewButton.Visibility = canSubmitForReview ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void AddInfoRow(string label, string value)
@@ -1051,6 +1064,120 @@ namespace SoftwareEngineering.Client
             }
 
             await LoadSubtasksAsync();
+        }
+
+        //..
+        private async void SubmitForReview_Click(object sender, RoutedEventArgs e)
+        {
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
+
+            DetailsSubmitReviewButton.IsEnabled = false;
+            var result = await reviewService.SubmitForReviewAsync(taskId, CurrentUserId);
+            DetailsSubmitReviewButton.IsEnabled = true;
+
+            if (result.ShowIfFailed("Не вдалося відправити на перевірку"))
+            {
+                return;
+            }
+
+            MessageBox.Show("Завдання відправлено на перевірку!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            await LoadTasksAsync();
+            var details = await taskService.GetDetailsAsync(taskId, CurrentUserId);
+            if (details.IsSuccess)
+            {
+                ShowTaskDetails(details.Value!);
+            }
+        }
+
+        private async Task LoadReviewQueueAsync()
+        {
+            var result = await reviewService.GetReviewQueueAsync(CurrentUserId);
+            if (result.ShowIfFailed("Не вдалося завантажити чергу перевірки"))
+            {
+                return;
+            }
+
+            ReviewQueueDataGrid.ItemsSource = result.Value!;
+            ReviewSelectedTitleText.Text = result.Value!.Count == 0
+                ? "Немає завдань, що очікують перевірки"
+                : "Оберіть завдання зі списку ліворуч";
+            ReviewSelectedDescriptionText.Text = "Опис вибраного завдання з'явиться тут.";
+            ReviewCommentTextBox.Clear();
+            ReviewApproveButton.IsEnabled = false;
+            ReviewRequestRevisionButton.IsEnabled = false;
+        }
+
+        private async void RefreshReviewQueue_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadReviewQueueAsync();
+        }
+
+        private void ReviewQueueDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (ReviewQueueDataGrid.SelectedItem is ReviewTaskItemModel selected)
+            {
+                ReviewSelectedTitleText.Text = $"{selected.TaskCode} · {selected.Title}";
+                ReviewSelectedDescriptionText.Text = string.IsNullOrWhiteSpace(selected.Description)
+                    ? "Немає опису"
+                    : selected.Description;
+                ReviewApproveButton.IsEnabled = true;
+                ReviewRequestRevisionButton.IsEnabled = true;
+            }
+            else
+            {
+                ReviewApproveButton.IsEnabled = false;
+                ReviewRequestRevisionButton.IsEnabled = false;
+            }
+        }
+
+        private async void ApproveReview_Click(object sender, RoutedEventArgs e)
+        {
+            if (ReviewQueueDataGrid.SelectedItem is not ReviewTaskItemModel selected)
+            {
+                return;
+            }
+
+            ReviewApproveButton.IsEnabled = false;
+            ReviewRequestRevisionButton.IsEnabled = false;
+
+            var result = await reviewService.ApproveAsync(selected.TaskId, CurrentUserId);
+            if (result.ShowIfFailed("Не вдалося прийняти завдання"))
+            {
+                ReviewApproveButton.IsEnabled = true;
+                ReviewRequestRevisionButton.IsEnabled = true;
+                return;
+            }
+
+            MessageBox.Show($"Завдання {selected.TaskCode} прийнято (Done)!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+            await LoadTasksAsync();
+            await LoadReviewQueueAsync();
+        }
+
+        private async void RequestRevision_Click(object sender, RoutedEventArgs e)
+        {
+            if (ReviewQueueDataGrid.SelectedItem is not ReviewTaskItemModel selected)
+            {
+                return;
+            }
+
+            ReviewApproveButton.IsEnabled = false;
+            ReviewRequestRevisionButton.IsEnabled = false;
+
+            var result = await reviewService.RequestRevisionAsync(selected.TaskId, ReviewCommentTextBox.Text, CurrentUserId);
+            if (result.ShowIfFailed("Не вдалося повернути завдання на доопрацювання"))
+            {
+                ReviewApproveButton.IsEnabled = true;
+                ReviewRequestRevisionButton.IsEnabled = true;
+                return;
+            }
+
+            MessageBox.Show($"Завдання {selected.TaskCode} повернуто на доопрацювання!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+            await LoadTasksAsync();
+            await LoadReviewQueueAsync();
         }
     }
 }
