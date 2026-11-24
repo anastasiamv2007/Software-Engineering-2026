@@ -1,5 +1,4 @@
-﻿using Serilog;
-using SoftwareEngineering.BLL.Interfaces;
+﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
@@ -25,6 +24,7 @@ namespace SoftwareEngineering.Client
         private Guid? detailsTaskId;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
+        private readonly IStatisticsService statisticsService;
 
 
         private static readonly string[] CategoryPalette =
@@ -32,7 +32,7 @@ namespace SoftwareEngineering.Client
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService, IReviewService reviewService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService, IStatisticsService statisticsService, IReviewService reviewService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
@@ -42,6 +42,7 @@ namespace SoftwareEngineering.Client
             this.subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
             this.commentService = commentService ?? throw new ArgumentNullException(nameof(commentService));
             this.reviewService = reviewService ?? throw new ArgumentNullException(nameof(reviewService));
+            this.statisticsService = statisticsService ?? throw new ArgumentNullException(nameof(statisticsService));
 
             BuildCategoryPalette();
             StartCategoryCreateMode();
@@ -166,7 +167,7 @@ namespace SoftwareEngineering.Client
 
             allTasks = result.Value!;
             ApplyFilter();
-            UpdateStats();
+            await UpdateStatsAsync(); ;
         }
 
         private void ApplyFilter()
@@ -298,31 +299,33 @@ namespace SoftwareEngineering.Client
             if (allTasks != null) ApplyFilter();
         }
 
-        private void UpdateStats()
+        private async Task UpdateStatsAsync()
         {
-            var now = DateTime.UtcNow;
-            var total = allTasks.Count;
-            var done = allTasks.Count(t => t.Status == TaskItemStatus.Done);
-            var inProgress = allTasks.Count(t => t.Status == TaskItemStatus.InProgress);
-            var overdue = allTasks.Count(t => t.Status != TaskItemStatus.Done && t.Deadline.HasValue && t.Deadline.Value.ToUniversalTime() < now);
-            var active = total - done;
+            var result = await statisticsService.GetStatisticsAsync(CurrentUserId);
+            if (result.ShowIfFailed("Не вдалося отримати статистику"))
+            {
+                return;
+            }
 
-            StatTotal.Text = total.ToString();
-            StatInProgress.Text = inProgress.ToString();
-            StatDone.Text = done.ToString();
-            StatOverdue.Text = overdue.ToString();
+            var stats = result.Value!;
+
+            StatTotal.Text = stats.Total.ToString();
+            StatInProgress.Text = stats.InProgress.ToString();
+            StatDone.Text = stats.Completed.ToString();
+            StatOverdue.Text = stats.Overdue.ToString();
+
+            AnTotal.Text = $"Загальна кількість завдань: {stats.Total}";
+            AnDone.Text = $"Виконано: {stats.Completed}";
+            AnActive.Text = $"Невиконано: {stats.Active}";
+            AnOverdue.Text = $"Протерміновано: {stats.Overdue}";
+            AnProgress.Value = stats.CompletedPercent;
+
 
             UpcomingList.ItemsSource = allTasks
               .Where(t => t.Status != TaskItemStatus.Done)
               .OrderBy(t => t.Deadline)
               .Take(5)
               .ToList();
-
-            AnTotal.Text = $"Загальна кількість завдань: {total}";
-            AnDone.Text = $"Виконано: {done}";
-            AnActive.Text = $"Невиконано: {active}";
-            AnOverdue.Text = $"Протерміновано: {overdue}";
-            AnProgress.Value = total == 0 ? 0 : done * 100.0 / total;
         }
 
         private void GoToCreate_Click(object sender, RoutedEventArgs e)

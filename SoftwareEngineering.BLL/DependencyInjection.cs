@@ -21,6 +21,8 @@ public static class DependencyInjection
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IProjectMemberService, ProjectMemberService>();
         services.AddScoped<IReviewService, ReviewService>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<IStatisticsService, StatisticsService>();
         return services;
     }
 }
