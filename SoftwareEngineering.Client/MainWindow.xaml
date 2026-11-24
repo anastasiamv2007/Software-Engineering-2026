@@ -123,23 +123,29 @@
                             FontSize="13" Margin="12,2" Padding="14,10" HorizontalContentAlignment="Left" Cursor="Hand"
                             ToolTip="Перемкнути світлу / темну тему" Click="ThemeToggle_Click"/>
                     <RadioButton Style="{StaticResource NavButton}" GroupName="Nav" Tag="Settings" Content="⚙  Налаштування" Click="Nav_Click"/>
-                    <!-- Панель керування акаунтом -->
-                    <Border Margin="16,12,16,0" Padding="10" Background="{DynamicResource Brush.SidebarCard}" CornerRadius="8">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <Border CornerRadius="16" Width="32" Height="32" Background="{DynamicResource Brush.Accent}" Margin="0,0,10,0">
-                                    <TextBlock x:Name="UserInitialsText" Text="?" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" FontSize="12"/>
-                                    <TextBlock Text="Активна сесія" Foreground="{DynamicResource Brush.TextMuted}" FontSize="10"/>
-                                </StackPanel>
+                    <!-- Обліковий запис: вихід і зміна бази сховані в меню, щоб не натиснути їх випадково -->
+                    <Button x:Name="AccountButton" Margin="16,12,16,0" Padding="10" Background="{DynamicResource Brush.SidebarCard}"
+                            BorderThickness="0" HorizontalContentAlignment="Stretch" Cursor="Hand" ToolTip="Обліковий запис"
+                            Click="AccountButton_Click">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Змінити базу даних" Click="SignOutAndDisconnect_Click"
+                                          ToolTip="Вийти та обрати інше підключення до бази даних"/>
+                                <Separator/>
+                                <MenuItem Header="Вийти з облікового запису" Foreground="{DynamicResource Brush.DangerText}" Click="SignOut_Click"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="⋯" FontSize="16" Foreground="{DynamicResource Brush.SidebarText}" VerticalAlignment="Center"/>
+                            <Border CornerRadius="16" Width="32" Height="32" Background="{DynamicResource Brush.Accent}" Margin="0,0,10,0">
+                                <TextBlock x:Name="UserInitialsText" Text="?" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="Активна сесія" Foreground="{DynamicResource Brush.TextMuted}" FontSize="10"/>
                             </StackPanel>
-
-                            <Button Content="Вийти" Style="{StaticResource DangerButton}" FontSize="11" Padding="4,6" Margin="0,0,0,4" Click="SignOut_Click" ToolTip="Вийти з поточного облікового запису"/>
-                            <Button Content="Змінити базу" Style="{StaticResource SecondaryButton}" FontSize="11" Padding="4,6" Click="SignOutAndDisconnect_Click" ToolTip="Вийти та обрати інше підключення до бази даних"/>
-                        </StackPanel>
-                    </Border>
+                        </DockPanel>
+                    </Button>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -314,7 +320,7 @@
                 <TextBlock x:Name="FilterErrorText" Foreground="{DynamicResource Brush.DangerText}" FontSize="12" Margin="0,6,0,0" Visibility="Collapsed"/>
                 </StackPanel>
 
-                <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
+                <local:ClippingBorder Grid.Row="3" Style="{StaticResource Card}" Padding="0">
                     <DataGrid x:Name="TasksDataGrid" MouseDoubleClick="TasksDataGrid_MouseDoubleClick" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="0"
                               Background="{DynamicResource Brush.Surface}" RowHeight="48" CanUserAddRows="False">
@@ -335,7 +341,7 @@
                             <DataGridTextColumn Header="СТАТУС" Binding="{Binding Status}" Width="110"/>
                         </DataGrid.Columns>
                     </DataGrid>
-                </Border>
+                </local:ClippingBorder>
             </Grid>
 
             <!-- 3. СТВОРИТИ ЗАВДАННЯ -->
@@ -715,7 +721,7 @@
                         <ColumnDefinition Width="2*"/>
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource Card}" Padding="0">
+                    <local:ClippingBorder Grid.Column="0" Style="{StaticResource Card}" Padding="0">
                         <DataGrid x:Name="ReviewQueueDataGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="0"
                                   Background="{DynamicResource Brush.Surface}" RowHeight="48" CanUserAddRows="False"
@@ -727,7 +733,7 @@
                                 <DataGridTextColumn Header="ДЕДЛАЙН" Binding="{Binding Deadline, StringFormat=dd.MM.yyyy HH:mm}" Width="135"/>
                             </DataGrid.Columns>
                         </DataGrid>
-                    </Border>
+                    </local:ClippingBorder>
 
                     <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
                         <StackPanel>

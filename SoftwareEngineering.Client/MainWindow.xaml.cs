@@ -94,6 +94,16 @@ namespace SoftwareEngineering.Client
             return parts.Length == 0 ? "?" : string.Concat(parts.Take(2).Select(part => char.ToUpperInvariant(part[0])));
         }
 
+        // Меню облікового запису відкривається над карткою користувача, на всю її ширину
+        private void AccountButton_Click(object sender, RoutedEventArgs e)
+        {
+            var menu = AccountButton.ContextMenu;
+            menu.PlacementTarget = AccountButton;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+            menu.MinWidth = AccountButton.ActualWidth;
+            menu.IsOpen = true;
+        }
+
         private void SignOut_Click(object sender, RoutedEventArgs e)
         {
             var result = MessageBox.Show(
