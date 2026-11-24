@@ -1,0 +1,52 @@
+<!--
+    Темно-синя палітра (відтінки slate). Ті самі ключі, що й у Light.xaml.
+    Контраст основного тексту до фону картки ~13:1, приглушеного ~6:1 (вимога WCAG AA — 4.5:1).
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Поверхні -->
+    <SolidColorBrush x:Key="Brush.Window" Color="#0B1120"/>
+    <SolidColorBrush x:Key="Brush.Surface" Color="#131C2E"/>
+    <SolidColorBrush x:Key="Brush.SurfaceAlt" Color="#1C2740"/>
+    <SolidColorBrush x:Key="Brush.Neutral" Color="#26324A"/>
+    <SolidColorBrush x:Key="Brush.Input" Color="#0F1729"/>
+    <SolidColorBrush x:Key="Brush.Border" Color="#243049"/>
+    <SolidColorBrush x:Key="Brush.BorderStrong" Color="#3A4A66"/>
+
+    <!-- Текст -->
+    <SolidColorBrush x:Key="Brush.Text" Color="#E2E8F0"/>
+    <SolidColorBrush x:Key="Brush.TextSecondary" Color="#CBD5E1"/>
+    <SolidColorBrush x:Key="Brush.TextMuted" Color="#94A3B8"/>
+    <SolidColorBrush x:Key="Brush.TextFaint" Color="#64748B"/>
+
+    <!-- Акцент -->
+    <SolidColorBrush x:Key="Brush.Accent" Color="#3B82F6"/>
+    <SolidColorBrush x:Key="Brush.AccentText" Color="#60A5FA"/>
+    <SolidColorBrush x:Key="Brush.AccentSoft" Color="#1E3A5F"/>
+    <SolidColorBrush x:Key="Brush.AccentSubtle" Color="#172554"/>
+    <SolidColorBrush x:Key="Brush.AccentSoftBorder" Color="#1E40AF"/>
+    <SolidColorBrush x:Key="Brush.AccentSoftText" Color="#93C5FD"/>
+
+    <!-- Стани -->
+    <SolidColorBrush x:Key="Brush.Danger" Color="#DC2626"/>
+    <SolidColorBrush x:Key="Brush.DangerText" Color="#F87171"/>
+    <SolidColorBrush x:Key="Brush.DangerSoft" Color="#3B1219"/>
+    <SolidColorBrush x:Key="Brush.DangerSoftBorder" Color="#7F1D1D"/>
+    <SolidColorBrush x:Key="Brush.DangerSoftText" Color="#FCA5A5"/>
+
+    <SolidColorBrush x:Key="Brush.Success" Color="#059669"/>
+    <SolidColorBrush x:Key="Brush.SuccessText" Color="#34D399"/>
+
+    <SolidColorBrush x:Key="Brush.Warning" Color="#B45309"/>
+    <SolidColorBrush x:Key="Brush.WarningText" Color="#FBBF24"/>
+    <SolidColorBrush x:Key="Brush.WarningSoft" Color="#3A2E0A"/>
+    <SolidColorBrush x:Key="Brush.WarningSoftBorder" Color="#854D0E"/>
+    <SolidColorBrush x:Key="Brush.WarningSoftText" Color="#FDE68A"/>
+
+    <!-- Бічне меню -->
+    <SolidColorBrush x:Key="Brush.Sidebar" Color="#060B16"/>
+    <SolidColorBrush x:Key="Brush.SidebarCard" Color="#131C2E"/>
+    <SolidColorBrush x:Key="Brush.SidebarItemActive" Color="#1E293B"/>
+    <SolidColorBrush x:Key="Brush.SidebarItemHover" Color="#16213A"/>
+    <SolidColorBrush x:Key="Brush.SidebarText" Color="#CBD5E1"/>
+</ResourceDictionary>

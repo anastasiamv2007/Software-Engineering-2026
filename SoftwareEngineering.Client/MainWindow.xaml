@@ -5,15 +5,15 @@
         xmlns:local="clr-namespace:SoftwareEngineering.Client"
         xmlns:models="clr-namespace:SoftwareEngineering.BLL.Models;assembly=SoftwareEngineering.BLL"
         Title="PLANORA" Height="800" Width="1280" MinWidth="1000" MinHeight="700"
-        WindowStartupLocation="CenterScreen" Background="#F8FAFC"
-        PreviewMouseDown="Window_PreviewMouseDown" PreviewKeyDown="Window_PreviewKeyDown">
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource Brush.Window}"
+        PreviewMouseDown="Window_PreviewMouseDown" PreviewKeyDown="Window_PreviewKeyDown" Foreground="{DynamicResource Brush.Text}">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <!-- Стиль кнопок бічної навігації -->
         <Style x:Key="NavButton" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="#CBD5E1"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.SidebarText}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Margin" Value="12,2"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -25,11 +25,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#1E293B"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SidebarItemActive}"/>
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#16213A"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.SidebarItemHover}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -39,16 +39,16 @@
 
         <!-- Картки -->
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#E2E8F0"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="12"/>
             <Setter Property="Padding" Value="20"/>
         </Style>
 
         <!-- Кнопки -->
-        <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="#2563EB"/>
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource Brush.Accent}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -56,17 +56,17 @@
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
 
-        <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="Foreground" Value="#1E293B"/>
-            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+        <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderStrong}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="14,8"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
 
-        <Style x:Key="DangerButton" TargetType="Button">
-            <Setter Property="Background" Value="#EF4444"/>
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource Brush.Danger}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -77,19 +77,19 @@
         <Style x:Key="PageTitle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="22"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="#0F172A"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
         </Style>
 
         <Style x:Key="PageSubtitle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="#64748B"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}"/>
             <Setter Property="Margin" Value="0,2,0,18"/>
         </Style>
 
         <Style x:Key="FieldLabel" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="#334155"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
         </Style>
     </Window.Resources>
@@ -101,7 +101,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- БІЧНА НАВІГАЦІЙНА ПАНЕЛЬ -->
-        <Border Grid.Column="0" Background="#0F172A">
+        <Border Grid.Column="0" Background="{DynamicResource Brush.Sidebar}">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top">
                     <TextBlock Text="PLANORA" Foreground="White" FontSize="20" FontWeight="Bold" Margin="24,24,24,20"/>
@@ -119,24 +119,33 @@
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom" Margin="0,0,0,16">
+                    <Button x:Name="ThemeToggleButton" Content="☾  Темна тема" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource Brush.SidebarText}"
+                            FontSize="13" Margin="12,2" Padding="14,10" HorizontalContentAlignment="Left" Cursor="Hand"
+                            ToolTip="Перемкнути світлу / темну тему" Click="ThemeToggle_Click"/>
                     <RadioButton Style="{StaticResource NavButton}" GroupName="Nav" Tag="Settings" Content="⚙  Налаштування" Click="Nav_Click"/>
-                    <!-- Панель керування акаунтом -->
-                    <Border Margin="16,12,16,0" Padding="10" Background="#1E293B" CornerRadius="8">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <Border CornerRadius="16" Width="32" Height="32" Background="#3B82F6" Margin="0,0,10,0">
-                                    <TextBlock x:Name="UserInitialsText" Text="?" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" FontSize="12"/>
-                                    <TextBlock Text="Активна сесія" Foreground="#64748B" FontSize="10"/>
-                                </StackPanel>
+                    <!-- Обліковий запис: вихід і зміна бази сховані в меню, щоб не натиснути їх випадково -->
+                    <Button x:Name="AccountButton" Margin="16,12,16,0" Padding="10" Background="{DynamicResource Brush.SidebarCard}"
+                            BorderThickness="0" HorizontalContentAlignment="Stretch" Cursor="Hand" ToolTip="Обліковий запис"
+                            Click="AccountButton_Click">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Змінити базу даних" Click="SignOutAndDisconnect_Click"
+                                          ToolTip="Вийти та обрати інше підключення до бази даних"/>
+                                <Separator/>
+                                <MenuItem Header="Вийти з облікового запису" Foreground="{DynamicResource Brush.DangerText}" Click="SignOut_Click"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="⋯" FontSize="16" Foreground="{DynamicResource Brush.SidebarText}" VerticalAlignment="Center"/>
+                            <Border CornerRadius="16" Width="32" Height="32" Background="{DynamicResource Brush.Accent}" Margin="0,0,10,0">
+                                <TextBlock x:Name="UserInitialsText" Text="?" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock x:Name="UserNameText" Text="Користувач" Foreground="White" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="Активна сесія" Foreground="{DynamicResource Brush.TextMuted}" FontSize="10"/>
                             </StackPanel>
-
-                            <Button Content="Вийти" Style="{StaticResource DangerButton}" FontSize="11" Padding="4,6" Margin="0,0,0,4" Click="SignOut_Click" ToolTip="Вийти з поточного облікового запису"/>
-                            <Button Content="Змінити базу" Style="{StaticResource SecondaryButton}" FontSize="11" Padding="4,6" Click="SignOutAndDisconnect_Click" ToolTip="Вийти та обрати інше підключення до бази даних"/>
-                        </StackPanel>
-                    </Border>
+                        </DockPanel>
+                    </Button>
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -161,26 +170,26 @@
                 <UniformGrid Grid.Row="1" Rows="1" Margin="0,0,0,18">
                     <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                         <StackPanel>
-                            <TextBlock Text="Всього завдань" Foreground="#64748B"/>
+                            <TextBlock Text="Всього завдань" Foreground="{DynamicResource Brush.TextMuted}"/>
                             <TextBlock x:Name="StatTotal" Text="0" FontSize="30" FontWeight="Bold"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                         <StackPanel>
-                            <TextBlock Text="В роботі" Foreground="#64748B"/>
+                            <TextBlock Text="В роботі" Foreground="{DynamicResource Brush.TextMuted}"/>
                             <TextBlock x:Name="StatInProgress" Text="0" FontSize="30" FontWeight="Bold"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                         <StackPanel>
-                            <TextBlock Text="Виконано" Foreground="#64748B"/>
-                            <TextBlock x:Name="StatDone" Text="0" FontSize="30" FontWeight="Bold" Foreground="#10B981"/>
+                            <TextBlock Text="Виконано" Foreground="{DynamicResource Brush.TextMuted}"/>
+                            <TextBlock x:Name="StatDone" Text="0" FontSize="30" FontWeight="Bold" Foreground="{DynamicResource Brush.SuccessText}"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Text="Протерміновано" Foreground="#64748B"/>
-                            <TextBlock x:Name="StatOverdue" Text="0" FontSize="30" FontWeight="Bold" Foreground="#EF4444"/>
+                            <TextBlock Text="Протерміновано" Foreground="{DynamicResource Brush.TextMuted}"/>
+                            <TextBlock x:Name="StatOverdue" Text="0" FontSize="30" FontWeight="Bold" Foreground="{DynamicResource Brush.DangerText}"/>
                         </StackPanel>
                     </Border>
                 </UniformGrid>
@@ -200,10 +209,10 @@
                     </Border>
 
                     <StackPanel Grid.Column="2">
-                        <Border Background="#FEFCE8" BorderBrush="#FEF08A" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,16">
+                        <Border Background="{DynamicResource Brush.WarningSoft}" BorderBrush="{DynamicResource Brush.WarningSoftBorder}" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,16">
                             <StackPanel>
-                                <TextBlock Text="⚠️ Системне сповіщення" FontWeight="Bold" Foreground="#854D0E" Margin="0,0,0,6"/>
-                                <TextBlock Text="Перевірте актуальні дедлайни та статус виконання завдань." TextWrapping="Wrap" FontSize="12" Foreground="#713F12"/>
+                                <TextBlock Text="⚠️ Системне сповіщення" FontWeight="Bold" Foreground="{DynamicResource Brush.WarningSoftText}" Margin="0,0,0,6"/>
+                                <TextBlock Text="Перевірте актуальні дедлайни та статус виконання завдань." TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Brush.WarningSoftText}"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -300,7 +309,7 @@
 
                     <!-- Тільки прострочені -->
                     <CheckBox x:Name="FilterOverdueCheckBox" Content="Тільки прострочені" 
-                              Foreground="#334155" FontWeight="SemiBold" VerticalAlignment="Bottom" Margin="0,0,16,8" 
+                              Foreground="{DynamicResource Brush.TextSecondary}" FontWeight="SemiBold" VerticalAlignment="Bottom" Margin="0,0,16,8" 
                               Checked="OnFilterChanged" Unchecked="OnFilterChanged"/>
 
                     <!-- Кнопка скидання -->
@@ -308,13 +317,13 @@
                 </WrapPanel>
 
                 <!-- Помилка фільтра (наприклад, «з» пізніше за «по»); список тоді лишається попереднім -->
-                <TextBlock x:Name="FilterErrorText" Foreground="#DC2626" FontSize="12" Margin="0,6,0,0" Visibility="Collapsed"/>
+                <TextBlock x:Name="FilterErrorText" Foreground="{DynamicResource Brush.DangerText}" FontSize="12" Margin="0,6,0,0" Visibility="Collapsed"/>
                 </StackPanel>
 
-                <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
+                <local:ClippingBorder Grid.Row="3" Style="{StaticResource Card}" Padding="0">
                     <DataGrid x:Name="TasksDataGrid" MouseDoubleClick="TasksDataGrid_MouseDoubleClick" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                               HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="0"
-                              Background="White" RowHeight="48" CanUserAddRows="False">
+                              Background="{DynamicResource Brush.Surface}" RowHeight="48" CanUserAddRows="False">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="НАЗВА ЗАВДАННЯ" Binding="{Binding Title}" Width="*"/>
                             <DataGridTemplateColumn Header="КАТЕГОРІЯ" Width="150">
@@ -332,7 +341,7 @@
                             <DataGridTextColumn Header="СТАТУС" Binding="{Binding Status}" Width="110"/>
                         </DataGrid.Columns>
                     </DataGrid>
-                </Border>
+                </local:ClippingBorder>
             </Grid>
 
             <!-- 3. СТВОРИТИ ЗАВДАННЯ -->
@@ -345,7 +354,7 @@
                             <TextBlock Text="Проєкт *" Style="{StaticResource FieldLabel}"/>
                             <!-- Лише проєкти, де користувач може створювати завдання; вписати назву вручну не можна -->
                             <ComboBox x:Name="ProjectComboBox" Height="34" VerticalContentAlignment="Center" DisplayMemberPath="Name" Margin="0,0,0,12"/>
-                            <TextBlock x:Name="NoProjectsHint" Visibility="Collapsed" TextWrapping="Wrap" FontSize="12" Foreground="#B45309" Margin="0,-6,0,12"
+                            <TextBlock x:Name="NoProjectsHint" Visibility="Collapsed" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Brush.WarningText}" Margin="0,-6,0,12"
                                        Text="Немає проєктів, у яких ви можете створювати завдання. Створіть проєкт на вкладці «Проєкти» або попросіть власника додати вас співвиконавцем."/>
 
                             <TextBlock Text="Назва завдання *" Style="{StaticResource FieldLabel}"/>
@@ -394,8 +403,8 @@
                     <!-- Заголовок: код, назва, статус, пріоритет -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                         <StackPanel x:Name="DetailsContainer">
-                            <TextBlock x:Name="DetailsCodeText" FontSize="12" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,0,4"/>
-                            <TextBlock x:Name="DetailsTitleText" FontSize="22" FontWeight="Bold" Foreground="#0F172A" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                            <TextBlock x:Name="DetailsCodeText" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextMuted}" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="DetailsTitleText" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource Brush.Text}" TextWrapping="Wrap" Margin="0,0,0,10"/>
                             <WrapPanel x:Name="DetailsBadges"/>
                         </StackPanel>
                     </Border>
@@ -415,10 +424,10 @@
                                                 Padding="10,3" FontSize="12" ToolTip="Скопіювати весь опис у буфер обміну" Click="CopyDescription_Click"/>
                                         <TextBlock Text="Опис" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" Margin="0"/>
                                     </DockPanel>
-                                    <Border Background="#F1F5F9" CornerRadius="8" Padding="8">
+                                    <Border Background="{DynamicResource Brush.SurfaceAlt}" CornerRadius="8" Padding="8">
                                         <!-- RichTextBox лише для читання: текст можна виділити й скопіювати (Ctrl+C), посилання клікабельні -->
                                         <RichTextBox x:Name="DetailsDescriptionBox" IsReadOnly="True" IsDocumentEnabled="True"
-                                                     BorderThickness="0" Background="Transparent" FontSize="14" Foreground="#334155"
+                                                     BorderThickness="0" Background="Transparent" FontSize="14" Foreground="{DynamicResource Brush.TextSecondary}"
                                                      VerticalScrollBarVisibility="Disabled" IsUndoEnabled="False"/>
                                     </Border>
                                 </StackPanel>
@@ -428,7 +437,7 @@
                             <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Підзадачі" Style="{StaticResource FieldLabel}"/>
-                                    <TextBlock x:Name="DetailsSubtasksText" FontSize="14" Foreground="#334155" Margin="0,0,0,6"/>
+                                    <TextBlock x:Name="DetailsSubtasksText" FontSize="14" Foreground="{DynamicResource Brush.TextSecondary}" Margin="0,0,0,6"/>
                                     <ProgressBar x:Name="DetailsSubtasksProgress" Height="8" Maximum="100" Margin="0,0,0,12"/>
 
                                     <!-- Tag списку — видимість кнопки видалення (лише автор завдання або власник проєкту) -->
@@ -437,13 +446,13 @@
                                             <DataTemplate>
                                                 <DockPanel Margin="0,4">
                                                     <Button DockPanel.Dock="Right" Content="✕" Width="28" Height="24" Padding="0"
-                                                            Background="Transparent" BorderThickness="0" Foreground="#EF4444" Cursor="Hand"
+                                                            Background="Transparent" BorderThickness="0" Foreground="{DynamicResource Brush.DangerText}" Cursor="Hand"
                                                             ToolTip="Видалити підзадачу" Tag="{Binding Id}" Click="DeleteSubtask_Click"
                                                             Visibility="{Binding Tag, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
                                                     <!-- Click, а не Checked: спрацьовує лише від дії користувача, не під час завантаження списку -->
                                                     <CheckBox IsChecked="{Binding IsCompleted, Mode=OneWay}" Tag="{Binding Id}" Click="SubtaskCheckBox_Click"
                                                               VerticalAlignment="Center" VerticalContentAlignment="Center">
-                                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Foreground="#0F172A" Margin="4,0,0,0"/>
+                                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.Text}" Margin="4,0,0,0"/>
                                                     </CheckBox>
                                                 </DockPanel>
                                             </DataTemplate>
@@ -472,18 +481,18 @@
                                              HorizontalContentAlignment="Stretch" Margin="0,0,0,12">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
+                                                <Border Background="{DynamicResource Brush.Window}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
                                                     <DockPanel>
                                                         <Button DockPanel.Dock="Right" Content="✕" Width="24" Height="22" Padding="0" VerticalAlignment="Top"
-                                                                Background="Transparent" BorderThickness="0" Foreground="#EF4444" Cursor="Hand"
+                                                                Background="Transparent" BorderThickness="0" Foreground="{DynamicResource Brush.DangerText}" Cursor="Hand"
                                                                 ToolTip="Видалити коментар" Tag="{Binding Id}" Click="DeleteComment_Click"
                                                                 Visibility="{Binding DeleteVisibility}"/>
                                                         <StackPanel>
                                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Foreground="#2563EB" FontSize="12" Margin="0,0,8,0"/>
-                                                                <TextBlock Text="{Binding Time}" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.AccentText}" FontSize="12" Margin="0,0,8,0"/>
+                                                                <TextBlock Text="{Binding Time}" FontSize="11" Foreground="{DynamicResource Brush.TextFaint}" VerticalAlignment="Center"/>
                                                             </StackPanel>
-                                                            <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="#334155" FontSize="13"/>
+                                                            <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.TextSecondary}" FontSize="13"/>
                                                         </StackPanel>
                                                     </DockPanel>
                                                 </Border>
@@ -497,7 +506,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBox x:Name="NewCommentTextBox" Height="54" TextWrapping="Wrap" AcceptsReturn="True" Padding="8"
-                                                 MaxLength="1000" VerticalScrollBarVisibility="Auto" FontSize="13" Foreground="#0F172A"/>
+                                                 MaxLength="1000" VerticalScrollBarVisibility="Auto" FontSize="13" Foreground="{DynamicResource Brush.Text}"/>
                                         <Button x:Name="SendCommentButton" Grid.Column="1" Content="Надіслати" Style="{StaticResource PrimaryButton}"
                                                 Margin="8,0,0,0" VerticalAlignment="Bottom" Click="SendComment_Click"/>
                                     </Grid>
@@ -511,10 +520,10 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <DockPanel Margin="0,6">
-                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Role}" Foreground="#64748B" VerticalAlignment="Center"/>
+                                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Role}" Foreground="{DynamicResource Brush.TextMuted}" VerticalAlignment="Center"/>
                                                     <StackPanel>
-                                                        <TextBlock Text="{Binding FullName}" FontWeight="SemiBold" Foreground="#0F172A"/>
-                                                        <TextBlock Text="{Binding Email}" FontSize="12" Foreground="#64748B"/>
+                                                        <TextBlock Text="{Binding FullName}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Text}"/>
+                                                        <TextBlock Text="{Binding Email}" FontSize="12" Foreground="{DynamicResource Brush.TextMuted}"/>
                                                     </StackPanel>
                                                 </DockPanel>
                                             </DataTemplate>
@@ -541,7 +550,7 @@
                         <Button Content="Назад до списку" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="CancelToTasks_Click"/>
                         <Button x:Name="DetailsEditButton" Content="Редагувати" Style="{StaticResource PrimaryButton}" Margin="0,0,8,0" Click="GoToEdit_Click"/>
                         <Button x:Name="DetailsCopyButton" Content="Копіювати" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="CopyTask_Click"/>
-                        <Button x:Name="DetailsSubmitReviewButton" Content="Відправити на перевірку" Style="{StaticResource PrimaryButton}" Background="#10B981" Click="SubmitForReview_Click"/>
+                        <Button x:Name="DetailsSubmitReviewButton" Content="Відправити на перевірку" Style="{StaticResource PrimaryButton}" Background="{DynamicResource Brush.Success}" Click="SubmitForReview_Click"/>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>
@@ -625,7 +634,7 @@
             <!-- 7. ВИДАЛЕННЯ ЗАВДАННЯ -->
             <ScrollViewer x:Name="Page_Delete" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Text="Видалення завдання (Owner)" Style="{StaticResource PageTitle}" Foreground="#EF4444"/>
+                    <TextBlock Text="Видалення завдання (Owner)" Style="{StaticResource PageTitle}" Foreground="{DynamicResource Brush.DangerText}"/>
                     <TextBlock Text="Лише власник (Owner) може видалити дане завдання" Style="{StaticResource PageSubtitle}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
@@ -635,8 +644,8 @@
                             <TextBlock Text="Current User ID (Guid користувача) *" Style="{StaticResource FieldLabel}"/>
                             <TextBox x:Name="DelUserIdTextBox" Height="34" VerticalContentAlignment="Center" Padding="8,0" Margin="0,0,0,16"/>
 
-                            <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,20">
-                                <TextBlock x:Name="DelStatusText" Text="Очікування підтвердження..." Foreground="#64748B" TextWrapping="Wrap"/>
+                            <Border Background="{DynamicResource Brush.Window}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,20">
+                                <TextBlock x:Name="DelStatusText" Text="Очікування підтвердження..." Foreground="{DynamicResource Brush.TextMuted}" TextWrapping="Wrap"/>
                             </Border>
 
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -656,34 +665,34 @@
 
                     <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                         <StackPanel>
-                            <TextBlock Text="Завершено вчасно" Foreground="#64748B" Margin="0,0,0,8"/>
-                            <ProgressBar x:Name="AnProgress" Height="12" Maximum="100" Foreground="#10B981"/>
+                            <TextBlock Text="Завершено вчасно" Foreground="{DynamicResource Brush.TextMuted}" Margin="0,0,0,8"/>
+                            <ProgressBar x:Name="AnProgress" Height="12" Maximum="100" Foreground="{DynamicResource Brush.Success}"/>
                         </StackPanel>
                     </Border>
 
                     <UniformGrid Rows="1">
                         <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                             <StackPanel>
-                                <TextBlock Text="Загальна кількість" Foreground="#64748B" FontSize="12"/>
+                                <TextBlock Text="Загальна кількість" Foreground="{DynamicResource Brush.TextMuted}" FontSize="12"/>
                                 <TextBlock x:Name="AnTotal" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,6,0,0"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                             <StackPanel>
-                                <TextBlock Text="Виконані" Foreground="#64748B" FontSize="12"/>
-                                <TextBlock x:Name="AnDone" FontSize="14" FontWeight="SemiBold" Foreground="#10B981" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                <TextBlock Text="Виконані" Foreground="{DynamicResource Brush.TextMuted}" FontSize="12"/>
+                                <TextBlock x:Name="AnDone" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Brush.SuccessText}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                             <StackPanel>
-                                <TextBlock Text="Активні" Foreground="#64748B" FontSize="12"/>
+                                <TextBlock Text="Активні" Foreground="{DynamicResource Brush.TextMuted}" FontSize="12"/>
                                 <TextBlock x:Name="AnActive" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,6,0,0"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Text="Протерміновані" Foreground="#64748B" FontSize="12"/>
-                                <TextBlock x:Name="AnOverdue" FontSize="14" FontWeight="SemiBold" Foreground="#EF4444" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                <TextBlock Text="Протерміновані" Foreground="{DynamicResource Brush.TextMuted}" FontSize="12"/>
+                                <TextBlock x:Name="AnOverdue" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource Brush.DangerText}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                             </StackPanel>
                         </Border>
                     </UniformGrid>
@@ -712,10 +721,10 @@
                         <ColumnDefinition Width="2*"/>
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource Card}" Padding="0">
+                    <local:ClippingBorder Grid.Column="0" Style="{StaticResource Card}" Padding="0">
                         <DataGrid x:Name="ReviewQueueDataGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
                                   HeadersVisibility="Column" GridLinesVisibility="Horizontal" BorderThickness="0"
-                                  Background="White" RowHeight="48" CanUserAddRows="False"
+                                  Background="{DynamicResource Brush.Surface}" RowHeight="48" CanUserAddRows="False"
                                   SelectionChanged="ReviewQueueDataGrid_SelectionChanged">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="КОД" Binding="{Binding TaskCode}" Width="85"/>
@@ -724,15 +733,15 @@
                                 <DataGridTextColumn Header="ДЕДЛАЙН" Binding="{Binding Deadline, StringFormat=dd.MM.yyyy HH:mm}" Width="135"/>
                             </DataGrid.Columns>
                         </DataGrid>
-                    </Border>
+                    </local:ClippingBorder>
 
                     <Border Grid.Column="2" Style="{StaticResource Card}" VerticalAlignment="Top">
                         <StackPanel>
-                            <TextBlock Text="Рішення рецензента" FontWeight="Bold" FontSize="16" Foreground="#0F172A" Margin="0,0,0,12"/>
+                            <TextBlock Text="Рішення рецензента" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource Brush.Text}" Margin="0,0,0,12"/>
 
-                            <TextBlock x:Name="ReviewSelectedTitleText" Text="Оберіть завдання зі списку ліворуч" FontWeight="SemiBold" FontSize="14" Foreground="#334155" TextWrapping="Wrap" Margin="0,0,0,8"/>
-                            <Border Background="#F1F5F9" CornerRadius="8" Padding="10" Margin="0,0,0,14">
-                                <TextBlock x:Name="ReviewSelectedDescriptionText" Text="Опис вибраного завдання з'явиться тут." Foreground="#475569" FontSize="13" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="ReviewSelectedTitleText" Text="Оберіть завдання зі списку ліворуч" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource Brush.TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <Border Background="{DynamicResource Brush.SurfaceAlt}" CornerRadius="8" Padding="10" Margin="0,0,0,14">
+                                <TextBlock x:Name="ReviewSelectedDescriptionText" Text="Опис вибраного завдання з'явиться тут." Foreground="{DynamicResource Brush.TextSecondary}" FontSize="13" TextWrapping="Wrap"/>
                             </Border>
 
                             <TextBlock Text="Коментар (обов'язково для повернення на доопрацювання)" Style="{StaticResource FieldLabel}"/>
@@ -741,7 +750,7 @@
 
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button x:Name="ReviewRequestRevisionButton" Content="Повернути на доопрацювання" Style="{StaticResource DangerButton}" Margin="0,0,8,0" IsEnabled="False" Click="RequestRevision_Click"/>
-                                <Button x:Name="ReviewApproveButton" Content="Прийняти (Done)" Style="{StaticResource PrimaryButton}" Background="#10B981" IsEnabled="False" Click="ApproveReview_Click"/>
+                                <Button x:Name="ReviewApproveButton" Content="Прийняти (Done)" Style="{StaticResource PrimaryButton}" Background="{DynamicResource Brush.Success}" IsEnabled="False" Click="ApproveReview_Click"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -781,13 +790,13 @@
                             </Grid.RowDefinitions>
 
                             <UniformGrid Grid.Row="0" Rows="1" Columns="7" Margin="0,0,0,6">
-                                <TextBlock Text="Пн" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="#64748B"/>
-                                <TextBlock Text="Вт" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="#64748B"/>
-                                <TextBlock Text="Ср" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="#64748B"/>
-                                <TextBlock Text="Чт" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="#64748B"/>
-                                <TextBlock Text="Пт" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="#64748B"/>
-                                <TextBlock Text="Сб" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="#94A3B8"/>
-                                <TextBlock Text="Нд" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="#94A3B8"/>
+                                <TextBlock Text="Пн" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextMuted}"/>
+                                <TextBlock Text="Вт" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextMuted}"/>
+                                <TextBlock Text="Ср" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextMuted}"/>
+                                <TextBlock Text="Чт" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextMuted}"/>
+                                <TextBlock Text="Пт" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextMuted}"/>
+                                <TextBlock Text="Сб" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextFaint}"/>
+                                <TextBlock Text="Нд" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextFaint}"/>
                             </UniformGrid>
 
                             <ItemsControl Grid.Row="1" x:Name="CalendarDaysControl">
@@ -798,50 +807,50 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type models:CalendarDayModel}">
-                                        <Border x:Name="Cell" Margin="2" CornerRadius="8" BorderThickness="1" BorderBrush="#E2E8F0"
-                                                Background="White" Padding="6,4" Cursor="Hand" MouseLeftButtonUp="CalendarDay_Click">
+                                        <Border x:Name="Cell" Margin="2" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource Brush.Border}"
+                                                Background="{DynamicResource Brush.Surface}" Padding="6,4" Cursor="Hand" MouseLeftButtonUp="CalendarDay_Click">
                                             <StackPanel>
                                                 <DockPanel>
-                                                    <Ellipse x:Name="OverdueDot" DockPanel.Dock="Right" Width="8" Height="8" Fill="#EF4444"
+                                                    <Ellipse x:Name="OverdueDot" DockPanel.Dock="Right" Width="8" Height="8" Fill="{DynamicResource Brush.Danger}"
                                                              VerticalAlignment="Center" Visibility="Collapsed" ToolTip="Є прострочені завдання"/>
-                                                    <TextBlock x:Name="DayNumber" Text="{Binding Day}" FontWeight="SemiBold" Foreground="#334155"/>
+                                                    <TextBlock x:Name="DayNumber" Text="{Binding Day}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.TextSecondary}"/>
                                                 </DockPanel>
                                                 <ItemsControl ItemsSource="{Binding PreviewTasks}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Border x:Name="Chip" Background="#EFF6FF" CornerRadius="4" Padding="4,1" Margin="0,2,0,0">
-                                                                <TextBlock x:Name="ChipText" Text="{Binding Title}" FontSize="11" Foreground="#1E40AF" TextTrimming="CharacterEllipsis"/>
+                                                            <Border x:Name="Chip" Background="{DynamicResource Brush.AccentSubtle}" CornerRadius="4" Padding="4,1" Margin="0,2,0,0">
+                                                                <TextBlock x:Name="ChipText" Text="{Binding Title}" FontSize="11" Foreground="{DynamicResource Brush.AccentSoftText}" TextTrimming="CharacterEllipsis"/>
                                                             </Border>
                                                             <DataTemplate.Triggers>
                                                                 <DataTrigger Binding="{Binding Status}" Value="{x:Static enums:TaskItemStatus.Done}">
-                                                                    <Setter TargetName="Chip" Property="Background" Value="#F1F5F9"/>
-                                                                    <Setter TargetName="ChipText" Property="Foreground" Value="#94A3B8"/>
+                                                                    <Setter TargetName="Chip" Property="Background" Value="{DynamicResource Brush.SurfaceAlt}"/>
+                                                                    <Setter TargetName="ChipText" Property="Foreground" Value="{DynamicResource Brush.TextFaint}"/>
                                                                     <Setter TargetName="ChipText" Property="TextDecorations" Value="Strikethrough"/>
                                                                 </DataTrigger>
                                                             </DataTemplate.Triggers>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
-                                                <TextBlock x:Name="MoreText" FontSize="11" Foreground="#64748B" Margin="0,2,0,0"
+                                                <TextBlock x:Name="MoreText" FontSize="11" Foreground="{DynamicResource Brush.TextMuted}" Margin="0,2,0,0"
                                                            Text="{Binding HiddenTasksCount, StringFormat='+{0} ще'}"/>
                                             </StackPanel>
                                         </Border>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
-                                                <Setter TargetName="Cell" Property="Background" Value="#F8FAFC"/>
+                                                <Setter TargetName="Cell" Property="Background" Value="{DynamicResource Brush.Window}"/>
                                                 <Setter TargetName="Cell" Property="Opacity" Value="0.5"/>
                                             </DataTrigger>
                                             <Trigger SourceName="Cell" Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Cell" Property="Background" Value="#F1F5F9"/>
+                                                <Setter TargetName="Cell" Property="Background" Value="{DynamicResource Brush.SurfaceAlt}"/>
                                             </Trigger>
                                             <!-- Обраний день — світло-блакитний фон; рамка «сьогодні» лишається окремо -->
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter TargetName="Cell" Property="Background" Value="#DBEAFE"/>
+                                                <Setter TargetName="Cell" Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsToday}" Value="True">
-                                                <Setter TargetName="Cell" Property="BorderBrush" Value="#2563EB"/>
+                                                <Setter TargetName="Cell" Property="BorderBrush" Value="{DynamicResource Brush.Accent}"/>
                                                 <Setter TargetName="Cell" Property="BorderThickness" Value="2"/>
-                                                <Setter TargetName="DayNumber" Property="Foreground" Value="#2563EB"/>
+                                                <Setter TargetName="DayNumber" Property="Foreground" Value="{DynamicResource Brush.AccentText}"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding HasOverdue}" Value="True">
                                                 <Setter TargetName="OverdueDot" Property="Visibility" Value="Visible"/>
@@ -858,23 +867,23 @@
 
                     <Border Grid.Column="2" Style="{StaticResource Card}">
                         <DockPanel>
-                            <TextBlock x:Name="CalendarSelectedDayTitle" DockPanel.Dock="Top" FontWeight="Bold" FontSize="15" Foreground="#0F172A" Margin="0,0,0,10"/>
-                            <TextBlock x:Name="CalendarNoTasksText" DockPanel.Dock="Top" Text="На цей день дедлайнів немає." Foreground="#64748B" Visibility="Collapsed"/>
+                            <TextBlock x:Name="CalendarSelectedDayTitle" DockPanel.Dock="Top" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource Brush.Text}" Margin="0,0,0,10"/>
+                            <TextBlock x:Name="CalendarNoTasksText" DockPanel.Dock="Top" Text="На цей день дедлайнів немає." Foreground="{DynamicResource Brush.TextMuted}" Visibility="Collapsed"/>
                             <ListBox x:Name="CalendarDayTasksList" BorderThickness="0" Background="Transparent" HorizontalContentAlignment="Stretch"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="CalendarDayTasks_DoubleClick">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <Border BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="0,6">
+                                        <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1" Padding="0,6">
                                             <StackPanel>
-                                                <TextBlock FontSize="11" Foreground="#64748B">
+                                                <TextBlock FontSize="11" Foreground="{DynamicResource Brush.TextMuted}">
                                                     <Run Text="{Binding Code, Mode=OneWay}"/>
                                                     <Run Text=" · "/>
                                                     <Run Text="{Binding Time, Mode=OneWay}"/>
                                                     <Run Text=" · "/>
                                                     <Run Text="{Binding Status, Mode=OneWay}"/>
                                                 </TextBlock>
-                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#0F172A" TextWrapping="Wrap"/>
-                                                <TextBlock Text="Прострочено" Foreground="#EF4444" FontSize="11"
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Text}" TextWrapping="Wrap"/>
+                                                <TextBlock Text="Прострочено" Foreground="{DynamicResource Brush.DangerText}" FontSize="11"
                                                            Visibility="{Binding IsOverdue, Converter={StaticResource BoolToVisibility}}"/>
                                             </StackPanel>
                                         </Border>
@@ -927,7 +936,7 @@
                                             </Grid.ColumnDefinitions>
                                             <Ellipse Width="12" Height="12" Fill="{Binding ColorHex}" Margin="0,0,10,0"/>
                                             <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="2" Text="{Binding TasksCount, StringFormat={}{0} завдань}" Foreground="#64748B" FontSize="12"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding TasksCount, StringFormat={}{0} завдань}" Foreground="{DynamicResource Brush.TextMuted}" FontSize="12"/>
                                         </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -946,14 +955,14 @@
                             <WrapPanel x:Name="CatPalette"/>
 
                             <TextBlock Text="Попередній перегляд" Style="{StaticResource FieldLabel}" Margin="0,14,0,6"/>
-                            <Border Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="1" CornerRadius="8" Padding="10">
+                            <Border Background="{DynamicResource Brush.AccentSubtle}" BorderBrush="{DynamicResource Brush.AccentSoftBorder}" BorderThickness="1" CornerRadius="8" Padding="10">
                                 <StackPanel Orientation="Horizontal">
                                     <Ellipse x:Name="CatPreviewDot" Width="12" Height="12" Margin="0,0,8,0"/>
                                     <TextBlock x:Name="CatPreviewText" Text="Поки що без назви"/>
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock x:Name="CatError" Foreground="#EF4444" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="Collapsed"/>
+                            <TextBlock x:Name="CatError" Foreground="{DynamicResource Brush.DangerText}" TextWrapping="Wrap" Margin="0,12,0,0" Visibility="Collapsed"/>
 
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
                                 <Button x:Name="CatDeleteButton" Content="Видалити" Style="{StaticResource DangerButton}" Margin="0,0,8,0" Visibility="Collapsed" Click="CatDelete_Click"/>
@@ -965,7 +974,25 @@
                 </Grid>
             </Grid>
             <Grid x:Name="Page_Settings" Visibility="Collapsed">
-                <TextBlock Text="Налаштування: у розробці" Style="{StaticResource PageTitle}"/>
+                <StackPanel>
+                    <TextBlock Text="Налаштування" Style="{StaticResource PageTitle}"/>
+                    <TextBlock Text="Параметри програми на цьому комп'ютері" Style="{StaticResource PageSubtitle}"/>
+                    <Border Style="{StaticResource Card}" HorizontalAlignment="Left" Width="460">
+                        <StackPanel>
+                            <TextBlock Text="Тема оформлення" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
+                            <!-- Tag — назва теми з AppTheme; код просто перебирає ці перемикачі -->
+                            <StackPanel x:Name="ThemeOptions">
+                                <RadioButton GroupName="Theme" Tag="System" Content="Як у Windows (світла або сіра темна)" Margin="0,0,0,8" Checked="ThemeRadio_Checked"/>
+                                <RadioButton GroupName="Theme" Tag="Light" Content="Світла" Margin="0,0,0,8" Checked="ThemeRadio_Checked"/>
+                                <RadioButton GroupName="Theme" Tag="Dark" Content="Темна сіра (як у VS Code)" Margin="0,0,0,8" Checked="ThemeRadio_Checked"/>
+                                <RadioButton GroupName="Theme" Tag="Black" Content="Чорна" Margin="0,0,0,8" Checked="ThemeRadio_Checked"/>
+                                <RadioButton GroupName="Theme" Tag="DarkBlue" Content="Темно-синя" Margin="0,0,0,8" Checked="ThemeRadio_Checked"/>
+                            </StackPanel>
+                            <TextBlock Text="Вибір запам'ятовується для вашого користувача Windows і діє в усіх вікнах програми."
+                                       Foreground="{DynamicResource Brush.TextMuted}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </Grid>
 
         </Grid>

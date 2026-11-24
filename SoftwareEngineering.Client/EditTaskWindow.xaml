@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:enums="clr-namespace:SoftwareEngineering.DAL.Enums;assembly=SoftwareEngineering.DAL"
         Title="Редагування завдання" Height="500" Width="450"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="{DynamicResource Brush.Window}" Foreground="{DynamicResource Brush.Text}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -40,7 +40,7 @@
         <!-- Кнопки -->
         <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Скасувати" Width="90" Height="30" Margin="0,0,10,0" Click="CancelButton_Click"/>
-            <Button Content="Зберегти" Width="110" Height="30" Click="SaveButton_Click" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
+            <Button Content="Зберегти" Width="110" Height="30" Click="SaveButton_Click" Background="{DynamicResource Brush.Accent}" Foreground="White" FontWeight="Bold"/>
         </StackPanel>
     </Grid>
 </Window>
