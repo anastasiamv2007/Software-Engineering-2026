@@ -24,9 +24,7 @@ public class TaskServiceTests
         this.SetProjectRole(ProjectRole.CoExecutor);
 
         // За замовчуванням у проєкті ще немає завдань
-        this.repositoryMock
-            .Setup(repository => repository.GetTaskCodesAsync(It.IsAny<Guid>()))
-            .ReturnsAsync(Array.Empty<string>());
+        this.repositoryMock.SetupAdd();
     }
 
     [Fact]
@@ -34,9 +32,7 @@ public class TaskServiceTests
     {
         // Arrange
         const string expectedTaskCode = "PL-5";
-        this.repositoryMock
-            .Setup(repository => repository.GetTaskCodesAsync(It.IsAny<Guid>()))
-            .ReturnsAsync(new[] { "PL-1", "PL-2", "PL-3", "PL-4" });
+        this.repositoryMock.SetupAdd(new[] { "PL-1", "PL-2", "PL-3", "PL-4" });
         var service = this.CreateService();
 
         // Act
@@ -230,20 +226,7 @@ public class TaskServiceTests
         Assert.Equal(ErrorType.Validation, (await service.CreateAsync(model)).Error?.Type);
 
         // Assert
-        this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task CreateAsync_RepositoryFails_ReturnsUnexpected()
-    {
-        // Arrange
-        this.repositoryMock
-            .Setup(repository => repository.AddAsync(It.IsAny<TaskItem>()))
-            .ThrowsAsync(new InvalidOperationException());
-        var service = this.CreateService();
-
-        // Act + Assert
-        Assert.Equal(ErrorType.Unexpected, (await service.CreateAsync(CreateValidModel())).Error?.Type);
+        this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>(), It.IsAny<Func<IReadOnlyList<string>, string>>()), Times.Never);
     }
 
     [Fact]
@@ -277,7 +260,7 @@ public class TaskServiceTests
         Assert.Equal(ErrorType.NotFound, (await service.CreateAsync(model)).Error?.Type);
 
         // Assert
-        this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
+        this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>(), It.IsAny<Func<IReadOnlyList<string>, string>>()), Times.Never);
     }
 
     [Fact]
@@ -429,10 +412,7 @@ public class TaskServiceTests
 
     private void CaptureSavedTask()
     {
-        this.repositoryMock
-            .Setup(repository => repository.AddAsync(It.IsAny<TaskItem>()))
-            .Callback<TaskItem>(task => this.savedTask = task)
-            .Returns(Task.CompletedTask);
+        this.repositoryMock.SetupAdd(onSaved: task => this.savedTask = task);
     }
 
     // 2
@@ -775,20 +755,6 @@ public class TaskServiceTests
         this.repositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<TaskItem>()), Times.Never);
     }
 
-    [Fact]
-    public async Task UpdateProgressAsync_RepositoryFails_ReturnsUnexpected()
-    {
-        // Arrange
-        var entity = this.CreateAssignedTask(out var userId);
-        this.repositoryMock
-            .Setup(repository => repository.UpdateAsync(It.IsAny<TaskItem>()))
-            .ThrowsAsync(new InvalidOperationException());
-        var service = this.CreateService();
-
-        // Act + Assert
-        Assert.Equal(ErrorType.Unexpected, (await service.UpdateProgressAsync(entity.Id, TaskItemStatus.Done, userId)).Error?.Type);
-    }
-
     // Матриця прав: власник проєкту / співвиконавець
 
     [Fact]
@@ -800,7 +766,7 @@ public class TaskServiceTests
 
         // Act + Assert
         Assert.Equal(ErrorType.Forbidden, (await service.CreateAsync(CreateValidModel())).Error?.Type);
-        this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
+        this.repositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>(), It.IsAny<Func<IReadOnlyList<string>, string>>()), Times.Never);
     }
 
     [Fact]
@@ -1015,19 +981,5 @@ public class TaskServiceTests
         Assert.Equal(ErrorType.Validation, (await taskService.DeleteTaskAsync(Guid.NewGuid(), Guid.Empty)).Error?.Type);
 
         mockRepo.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task GetByIdAsync_RepositoryThrowsException_ReturnsUnexpected()
-    {
-        // Arrange
-        var taskId = Guid.NewGuid();
-        var mockRepo = new Mock<ITaskRepository>();
-        mockRepo.Setup(repo => repo.GetByIdAsync(taskId)).ThrowsAsync(new InvalidOperationException("DB error"));
-
-        var taskService = new TaskService(mockRepo.Object, this.projectRepositoryMock.Object, this.categoryRepositoryMock.Object);
-
-        // Act & Assert
-        Assert.Equal(ErrorType.Unexpected, (await taskService.GetByIdAsync(taskId)).Error?.Type);
     }
 }

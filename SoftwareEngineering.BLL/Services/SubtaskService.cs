@@ -22,132 +22,120 @@ public class SubtaskService : BaseService, ISubtaskService
         this.projectRepository = projectRepository;
     }
 
-    public Task<Result<IReadOnlyList<SubtaskModel>>> GetByTaskAsync(Guid taskId, Guid currentUserId)
+    public async Task<Result<IReadOnlyList<SubtaskModel>>> GetByTaskAsync(Guid taskId, Guid currentUserId)
     {
-        return this.ExecuteAsync("Отримання підзадач", async () =>
+        var access = await this.GetAccessAsync(taskId, currentUserId);
+        if (access.Error is { } error)
         {
-            var access = await this.GetAccessAsync(taskId, currentUserId);
-            if (access.Error is { } error)
-            {
-                return Result.Fail<IReadOnlyList<SubtaskModel>>(error.Type, error.Message);
-            }
+            return this.Fail<IReadOnlyList<SubtaskModel>>(error.Type, error.Message);
+        }
 
-            if (!access.CanView)
-            {
-                return Result.Fail<IReadOnlyList<SubtaskModel>>(ErrorType.Forbidden, "Переглядати підзадачі можуть лише учасники проєкту.");
-            }
+        if (!access.CanView)
+        {
+            return this.Fail<IReadOnlyList<SubtaskModel>>(ErrorType.Forbidden, "Переглядати підзадачі можуть лише учасники проєкту.");
+        }
 
-            var subtasks = await this.subtaskRepository.GetByTaskIdAsync(taskId);
-            IReadOnlyList<SubtaskModel> models = subtasks.Select(ToModel).ToList();
-            return Result.Ok(models);
-        });
+        var subtasks = await this.subtaskRepository.GetByTaskIdAsync(taskId);
+        IReadOnlyList<SubtaskModel> models = subtasks.Select(ToModel).ToList();
+        return Result.Ok(models);
     }
 
-    public Task<Result<SubtaskModel>> AddAsync(Guid taskId, string title, Guid currentUserId)
+    public async Task<Result<SubtaskModel>> AddAsync(Guid taskId, string title, Guid currentUserId)
     {
-        return this.ExecuteAsync("Створення підзадачі", async () =>
+        var trimmedTitle = title?.Trim() ?? string.Empty;
+        if (trimmedTitle.Length == 0)
         {
-            var trimmedTitle = title?.Trim() ?? string.Empty;
-            if (trimmedTitle.Length == 0)
-            {
-                return Result.Fail<SubtaskModel>(ErrorType.Validation, "Назва підзадачі не може бути порожньою.");
-            }
+            return this.Fail<SubtaskModel>(ErrorType.Validation, "Назва підзадачі не може бути порожньою.");
+        }
 
-            if (trimmedTitle.Length > MaxTitleLength)
-            {
-                return Result.Fail<SubtaskModel>(ErrorType.Validation, $"Назва підзадачі не повинна перевищувати {MaxTitleLength} символів.");
-            }
+        if (trimmedTitle.Length > MaxTitleLength)
+        {
+            return this.Fail<SubtaskModel>(ErrorType.Validation, $"Назва підзадачі не повинна перевищувати {MaxTitleLength} символів.");
+        }
 
-            var access = await this.GetAccessAsync(taskId, currentUserId);
-            if (access.Error is { } error)
-            {
-                return Result.Fail<SubtaskModel>(error.Type, error.Message);
-            }
+        var access = await this.GetAccessAsync(taskId, currentUserId);
+        if (access.Error is { } error)
+        {
+            return this.Fail<SubtaskModel>(error.Type, error.Message);
+        }
 
-            if (!access.CanEdit)
-            {
-                return Result.Fail<SubtaskModel>(ErrorType.Forbidden, "Додавати підзадачі можуть лише учасники проєкту та виконавець завдання.");
-            }
+        if (!access.CanEdit)
+        {
+            return this.Fail<SubtaskModel>(ErrorType.Forbidden, "Додавати підзадачі можуть лише учасники проєкту та виконавець завдання.");
+        }
 
-            var subtask = new Subtask
-            {
-                Id = Guid.NewGuid(),
-                TaskId = taskId,
-                Title = trimmedTitle,
-                IsCompleted = false,
-            };
+        var subtask = new Subtask
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            Title = trimmedTitle,
+            IsCompleted = false,
+        };
 
-            await this.subtaskRepository.AddAsync(subtask);
-            this.Logger.Information("Користувач {UserId} створив підзадачу {SubtaskId} для завдання {TaskId}", currentUserId, subtask.Id, taskId);
+        await this.subtaskRepository.AddAsync(subtask);
+        this.Logger.Information("Користувач {UserId} створив підзадачу {SubtaskId} для завдання {TaskId}", currentUserId, subtask.Id, taskId);
 
+        return Result.Ok(ToModel(subtask));
+    }
+
+    public async Task<Result<SubtaskModel>> SetCompletedAsync(Guid subtaskId, bool isCompleted, Guid currentUserId)
+    {
+        var subtask = await this.subtaskRepository.GetByIdAsync(subtaskId);
+        if (subtask is null)
+        {
+            return this.Fail<SubtaskModel>(ErrorType.NotFound, "Підзадачу не знайдено. Можливо, її вже видалили.");
+        }
+
+        var access = await this.GetAccessAsync(subtask.TaskId, currentUserId);
+        if (access.Error is { } error)
+        {
+            return this.Fail<SubtaskModel>(error.Type, error.Message);
+        }
+
+        if (!access.CanEdit)
+        {
+            return this.Fail<SubtaskModel>(ErrorType.Forbidden, "Відмічати підзадачі можуть лише учасники проєкту та виконавець завдання.");
+        }
+
+        if (subtask.IsCompleted == isCompleted)
+        {
             return Result.Ok(ToModel(subtask));
-        });
+        }
+
+        subtask.IsCompleted = isCompleted;
+        await this.subtaskRepository.UpdateAsync(subtask);
+        this.Logger.Information(
+            "Користувач {UserId} змінив стан підзадачі {SubtaskId} на {IsCompleted}",
+            currentUserId,
+            subtaskId,
+            isCompleted);
+
+        return Result.Ok(ToModel(subtask));
     }
 
-    public Task<Result<SubtaskModel>> SetCompletedAsync(Guid subtaskId, bool isCompleted, Guid currentUserId)
+    public async Task<Result> DeleteAsync(Guid subtaskId, Guid currentUserId)
     {
-        return this.ExecuteAsync("Зміна стану підзадачі", async () =>
+        var subtask = await this.subtaskRepository.GetByIdAsync(subtaskId);
+        if (subtask is null)
         {
-            var subtask = await this.subtaskRepository.GetByIdAsync(subtaskId);
-            if (subtask is null)
-            {
-                return Result.Fail<SubtaskModel>(ErrorType.NotFound, "Підзадачу не знайдено. Можливо, її вже видалили.");
-            }
+            return this.Fail(ErrorType.NotFound, "Підзадачу не знайдено. Можливо, її вже видалили.");
+        }
 
-            var access = await this.GetAccessAsync(subtask.TaskId, currentUserId);
-            if (access.Error is { } error)
-            {
-                return Result.Fail<SubtaskModel>(error.Type, error.Message);
-            }
-
-            if (!access.CanEdit)
-            {
-                return Result.Fail<SubtaskModel>(ErrorType.Forbidden, "Відмічати підзадачі можуть лише учасники проєкту та виконавець завдання.");
-            }
-
-            if (subtask.IsCompleted == isCompleted)
-            {
-                return Result.Ok(ToModel(subtask));
-            }
-
-            subtask.IsCompleted = isCompleted;
-            await this.subtaskRepository.UpdateAsync(subtask);
-            this.Logger.Information(
-                "Користувач {UserId} змінив стан підзадачі {SubtaskId} на {IsCompleted}",
-                currentUserId,
-                subtaskId,
-                isCompleted);
-
-            return Result.Ok(ToModel(subtask));
-        });
-    }
-
-    public Task<Result> DeleteAsync(Guid subtaskId, Guid currentUserId)
-    {
-        return this.ExecuteAsync("Видалення підзадачі", async () =>
+        var access = await this.GetAccessAsync(subtask.TaskId, currentUserId);
+        if (access.Error is { } error)
         {
-            var subtask = await this.subtaskRepository.GetByIdAsync(subtaskId);
-            if (subtask is null)
-            {
-                return Result.Fail(ErrorType.NotFound, "Підзадачу не знайдено. Можливо, її вже видалили.");
-            }
+            return this.Fail(error.Type, error.Message);
+        }
 
-            var access = await this.GetAccessAsync(subtask.TaskId, currentUserId);
-            if (access.Error is { } error)
-            {
-                return Result.Fail(error.Type, error.Message);
-            }
+        if (!access.CanManage)
+        {
+            return this.Fail(ErrorType.Forbidden, "Видаляти підзадачі може лише автор завдання або власник проєкту.");
+        }
 
-            if (!access.CanManage)
-            {
-                return Result.Fail(ErrorType.Forbidden, "Видаляти підзадачі може лише автор завдання або власник проєкту.");
-            }
+        await this.subtaskRepository.DeleteAsync(subtaskId);
+        this.Logger.Information("Користувач {UserId} видалив підзадачу {SubtaskId}", currentUserId, subtaskId);
 
-            await this.subtaskRepository.DeleteAsync(subtaskId);
-            this.Logger.Information("Користувач {UserId} видалив підзадачу {SubtaskId}", currentUserId, subtaskId);
-
-            return Result.Ok();
-        });
+        return Result.Ok();
     }
 
     private static SubtaskModel ToModel(Subtask subtask)

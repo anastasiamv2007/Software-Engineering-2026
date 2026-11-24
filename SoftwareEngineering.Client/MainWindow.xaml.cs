@@ -1,10 +1,14 @@
-﻿using SoftwareEngineering.BLL.Interfaces;
+﻿using Serilog;
+using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Enums;
+using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 
 
@@ -21,11 +25,11 @@ namespace SoftwareEngineering.Client
         private readonly ISubtaskService subtaskService;
         private readonly ICommentService commentService;
         private readonly IReviewService reviewService;
+        private readonly IAuthService authService;
         private Guid? detailsTaskId;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
         private readonly IStatisticsService statisticsService;
-        private readonly IAuthService authService;
 
 
         private static readonly string[] CategoryPalette =
@@ -43,8 +47,8 @@ namespace SoftwareEngineering.Client
             this.subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
             this.commentService = commentService ?? throw new ArgumentNullException(nameof(commentService));
             this.reviewService = reviewService ?? throw new ArgumentNullException(nameof(reviewService));
-            this.statisticsService = statisticsService ?? throw new ArgumentNullException(nameof(statisticsService));
             this.authService = authService ?? throw new ArgumentNullException(nameof(authService));
+            this.statisticsService = statisticsService ?? throw new ArgumentNullException(nameof(statisticsService));
 
             BuildCategoryPalette();
             StartCategoryCreateMode();
@@ -58,6 +62,12 @@ namespace SoftwareEngineering.Client
             DelUserIdTextBox.IsReadOnly = true;
 
             DeadlineDatePicker.SelectedDate = DateTime.Now.AddDays(1);
+
+            // Перемикачі теми показують поточний вибір; відписуємось при закритті, щоб статична подія не тримала вікно після виходу
+            SyncThemeControls();
+            ThemeManager.ThemeChanged += OnThemeChanged;
+            Closed += (_, _) => ThemeManager.ThemeChanged -= OnThemeChanged;
+
             Loaded += async (_, _) =>
             {
                 // Категорії потрібні для фільтра на сторінці завдань
@@ -84,6 +94,16 @@ namespace SoftwareEngineering.Client
         {
             var parts = (fullName ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
             return parts.Length == 0 ? "?" : string.Concat(parts.Take(2).Select(part => char.ToUpperInvariant(part[0])));
+        }
+
+        // Меню облікового запису відкривається над карткою користувача, на всю її ширину
+        private void AccountButton_Click(object sender, RoutedEventArgs e)
+        {
+            var menu = AccountButton.ContextMenu;
+            menu.PlacementTarget = AccountButton;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+            menu.MinWidth = AccountButton.ActualWidth;
+            menu.IsOpen = true;
         }
 
         private void SignOut_Click(object sender, RoutedEventArgs e)
@@ -128,8 +148,161 @@ namespace SoftwareEngineering.Client
             }
         }
 
-        private void ShowPage(string page)
+        // ---------- Історія вкладок: «назад» / «вперед» бічними кнопками миші або Alt+← / Alt+→ ----------
+        //
+        // Правила, щоб не відкрити вкладку в недійсному стані:
+        // 1. Форми (редагування, прогрес, видалення) в історію не потрапляють: вони заповнені даними
+        //    на момент відкриття, і після збереження чи видалення повертатися в них не можна.
+        // 2. Деталі запам'ятовуються разом з id завдання і при поверненні завантажуються з БД заново.
+        //    Якщо завдання вже видалили, цей крок історії мовчки пропускається.
+        // 3. Решта вкладок і так перечитує дані, коли відкривається (або показує вже оновлений список).
+
+        private const int MaxPageHistory = 50;
+
+        private static readonly HashSet<string> FormPages = new() { "Edit", "UpdateProgress", "Delete" };
+
+        private readonly List<PageEntry> backHistory = new();
+
+        private readonly List<PageEntry> forwardHistory = new();
+
+        private PageEntry currentEntry = new("Overview", null);
+
+        private bool isNavigatingHistory;
+
+        private void Window_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
+            // XButton1 — бічна кнопка «назад», XButton2 — «вперед»
+            if (e.ChangedButton == System.Windows.Input.MouseButton.XButton1)
+            {
+                NavigateHistory(backHistory, forwardHistory);
+                e.Handled = true;
+            }
+            else if (e.ChangedButton == System.Windows.Input.MouseButton.XButton2)
+            {
+                NavigateHistory(forwardHistory, backHistory);
+                e.Handled = true;
+            }
+        }
+
+        private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            // З Alt клавіша приходить як Key.System, а сама стрілка — у SystemKey
+            if (e.Key != System.Windows.Input.Key.System)
+            {
+                return;
+            }
+
+            if (e.SystemKey == System.Windows.Input.Key.Left)
+            {
+                NavigateHistory(backHistory, forwardHistory);
+                e.Handled = true;
+            }
+            else if (e.SystemKey == System.Windows.Input.Key.Right)
+            {
+                NavigateHistory(forwardHistory, backHistory);
+                e.Handled = true;
+            }
+        }
+
+        // from — звідки беремо крок (назад або вперед), to — куди кладемо поточну вкладку, щоб можна було повернутися
+        private async void NavigateHistory(List<PageEntry> from, List<PageEntry> to)
+        {
+            // Поки деталі вантажаться з БД, повторні натискання ігноруємо, щоб кроки не перемішались
+            if (isNavigatingHistory)
+            {
+                return;
+            }
+
+            isNavigatingHistory = true;
+            using var navigation = UiBusy.Scope(() => { }, () => isNavigatingHistory = false);
+
+            while (from.Count > 0)
+            {
+                var target = from[^1];
+                from.RemoveAt(from.Count - 1);
+
+                if (target.Page == "Details")
+                {
+                    if (target.TaskId is null)
+                    {
+                        continue;
+                    }
+
+                    var details = await taskService.GetDetailsAsync(target.TaskId.Value, CurrentUserId);
+                    if (details.IsFailure)
+                    {
+                        // Завдання видалили або доступ забрали — пропускаємо цей крок і пробуємо наступний
+                        continue;
+                    }
+
+                    ShowTaskDetails(details.Value!);
+                    await LoadSubtasksAsync();
+                    await LoadCommentsAsync();
+                }
+
+                Remember(to, currentEntry);
+                ShowPage(target.Page, rememberInHistory: false);
+                return;
+            }
+        }
+
+        private static void Remember(List<PageEntry> history, PageEntry entry)
+        {
+            if (FormPages.Contains(entry.Page))
+            {
+                return;
+            }
+
+            history.Add(entry);
+            if (history.Count > MaxPageHistory)
+            {
+                history.RemoveAt(0);
+            }
+        }
+
+        // Підсвічуємо в меню пункт відкритої вкладки (у деталей і форм пункту немає — лишається попередній)
+        private void SyncNavigation(string page)
+        {
+            var button = FindNavButtons(this).FirstOrDefault(radio => radio.Tag as string == page);
+            if (button != null)
+            {
+                button.IsChecked = true;
+            }
+        }
+
+        private static IEnumerable<RadioButton> FindNavButtons(DependencyObject parent)
+        {
+            foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
+            {
+                if (child is RadioButton { GroupName: "Nav" } radio)
+                {
+                    yield return radio;
+                }
+
+                foreach (var nested in FindNavButtons(child))
+                {
+                    yield return nested;
+                }
+            }
+        }
+
+        // Крок історії: вкладка і, для деталей, яке саме завдання було відкрито
+        private sealed record PageEntry(string Page, Guid? TaskId);
+
+        // async void: помилка завантаження сторінки дійде до глобального обробника в App, а не загубиться
+        private async void ShowPage(string page, bool rememberInHistory = true)
+        {
+            var entry = new PageEntry(page, page == "Details" ? detailsTaskId : null);
+            if (rememberInHistory && entry != currentEntry)
+            {
+                // Новий перехід, як у браузері, обнуляє «вперед»
+                Remember(backHistory, currentEntry);
+                forwardHistory.Clear();
+            }
+
+            currentEntry = entry;
+            SyncNavigation(page);
+
             foreach (FrameworkElement element in PagesHost.Children)
             {
                 element.Visibility = element.Name == $"Page_{page}" ? Visibility.Visible : Visibility.Collapsed;
@@ -138,7 +311,7 @@ namespace SoftwareEngineering.Client
             // Список категорій оновлюємо щоразу, коли відкривається вкладка
             if (page == "Categories")
             {
-                _ = LoadCategoriesAsync();
+                await LoadCategoriesAsync();
             }
 
             if (page == "Projects")
@@ -148,7 +321,17 @@ namespace SoftwareEngineering.Client
 
             if (page == "Review")
             {
-                _ = LoadReviewQueueAsync();
+                await LoadReviewQueueAsync();
+            }
+
+            if (page == "Create")
+            {
+                await LoadProjectChoicesAsync();
+            }
+
+            if (page == "Calendar")
+            {
+                RenderCalendar();
             }
 
             if (page == "Settings")
@@ -174,6 +357,11 @@ namespace SoftwareEngineering.Client
 
             allTasks = result.Value!;
             ApplyFilter();
+            if (Page_Calendar.Visibility == Visibility.Visible)
+            {
+                RenderCalendar();
+            }
+
             await UpdateStatsAsync(); ;
         }
 
@@ -349,19 +537,20 @@ namespace SoftwareEngineering.Client
                 priority = parsed;
             }
 
-            var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty, CurrentUserId);
-            if (project.ShowIfFailed("Завдання не створено"))
+            // Проєкт тільки зі списку: створювати проєкт «на льоту» з назви більше не можна
+            if (ProjectComboBox.SelectedItem is not ProjectModel project)
             {
+                MessageBox.Show("Оберіть проєкт зі списку.", "Завдання не створено", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             var created = await taskService.CreateAsync(new TaskModel
             {
-                ProjectId = project.Value!.Id,
+                ProjectId = project.Id,
                 OwnerId = CurrentUserId,
                 Title = TitleTextBox.Text?.Trim() ?? string.Empty,
                 Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
-                Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
+                Deadline = EndOfDay(DeadlineDatePicker.SelectedDate),
                 Priority = priority,
                 CategoryId = GetSelectedCategoryId(CategoryComboBox),
                 Status = TaskItemStatus.Todo,
@@ -385,16 +574,7 @@ namespace SoftwareEngineering.Client
         {
             if (TasksDataGrid.SelectedItem is TaskModel selected)
             {
-                var details = await taskService.GetDetailsAsync(selected.Id, CurrentUserId);
-                if (details.ShowIfFailed("Деталі недоступні"))
-                {
-                    return;
-                }
-
-                ShowTaskDetails(details.Value!);
-                await LoadSubtasksAsync();
-                await LoadCommentsAsync();
-                ShowPage("Details");
+                await OpenTaskDetailsAsync(selected.Id);
             }
             else
             {
@@ -432,19 +612,19 @@ namespace SoftwareEngineering.Client
             DetailsTitleText.Text = task.Title;
 
             DetailsBadges.Children.Clear();
-            DetailsBadges.Children.Add(CreateBadge(StatusText(task.Status), "#DBEAFE", "#1D4ED8"));
-            DetailsBadges.Children.Add(CreateBadge($"Пріоритет: {PriorityText(task.Priority)}", "#F1F5F9", "#334155"));
+            DetailsBadges.Children.Add(CreateBadge(StatusText(task.Status), "Brush.AccentSoft", "Brush.AccentSoftText"));
+            DetailsBadges.Children.Add(CreateBadge($"Пріоритет: {PriorityText(task.Priority)}", "Brush.SurfaceAlt", "Brush.TextSecondary"));
             if (details.IsOverdue)
             {
-                DetailsBadges.Children.Add(CreateBadge("Прострочено", "#FEE2E2", "#B91C1C"));
+                DetailsBadges.Children.Add(CreateBadge("Прострочено", "Brush.DangerSoft", "Brush.DangerSoftText"));
             }
 
             if (details.CategoryName != null)
             {
-                DetailsBadges.Children.Add(CreateBadge(details.CategoryName, details.CategoryColorHex ?? "#E2E8F0", "#FFFFFF"));
+                DetailsBadges.Children.Add(CreateCategoryBadge(details.CategoryName, details.CategoryColorHex ?? "#64748B"));
             }
 
-            DetailsDescriptionText.Text = string.IsNullOrWhiteSpace(task.Description) ? "Немає опису" : task.Description;
+            ShowDescription(task.Description);
 
 
             DetailsMembersList.ItemsSource = details.Members
@@ -496,8 +676,10 @@ namespace SoftwareEngineering.Client
             var row = DetailsInfoGrid.RowDefinitions.Count;
             DetailsInfoGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            var labelText = new TextBlock { Text = label, Foreground = ToBrush("#64748B"), Margin = new Thickness(0, 6, 12, 6) };
-            var valueText = new TextBlock { Text = value, Foreground = ToBrush("#0F172A"), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 6) };
+            var labelText = new TextBlock { Text = label, Margin = new Thickness(0, 6, 12, 6) };
+            var valueText = new TextBlock { Text = value, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 6) };
+            labelText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.TextMuted");
+            valueText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
             Grid.SetRow(labelText, row);
             Grid.SetRow(valueText, row);
             Grid.SetColumn(valueText, 1);
@@ -506,15 +688,33 @@ namespace SoftwareEngineering.Client
             DetailsInfoGrid.Children.Add(valueText);
         }
 
-        private static Border CreateBadge(string text, string background, string foreground)
+        // Кольори беремо як посилання на ресурси теми: при перемиканні теми бейдж перефарбується сам
+        private static Border CreateBadge(string text, string backgroundKey, string foregroundKey)
         {
-            return new Border
+            var label = new TextBlock { Text = text, FontSize = 12, FontWeight = FontWeights.SemiBold };
+            label.SetResourceReference(TextBlock.ForegroundProperty, foregroundKey);
+
+            var badge = new Border
             {
-                Background = ToBrush(background),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(10, 3, 10, 3),
                 Margin = new Thickness(0, 0, 8, 4),
-                Child = new TextBlock { Text = text, Foreground = ToBrush(foreground), FontSize = 12, FontWeight = FontWeights.SemiBold },
+                Child = label,
+            };
+            badge.SetResourceReference(Border.BackgroundProperty, backgroundKey);
+            return badge;
+        }
+
+        // Категорія має власний колір, обраний користувачем, — він однаковий в обох темах
+        private static Border CreateCategoryBadge(string text, string colorHex)
+        {
+            return new Border
+            {
+                Background = ToBrush(colorHex),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(10, 3, 10, 3),
+                Margin = new Thickness(0, 0, 8, 4),
+                Child = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 12, FontWeight = FontWeights.SemiBold },
             };
         }
 
@@ -773,7 +973,7 @@ namespace SoftwareEngineering.Client
             foreach (Button button in CatPalette.Children)
             {
                 button.BorderThickness = new Thickness((string)button.Tag == hex ? 3 : 0);
-                button.BorderBrush = Brushes.Black;
+                button.SetResourceReference(Button.BorderBrushProperty, "Brush.Text");
             }
         }
 
@@ -939,10 +1139,8 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            // Сервіс не кидає винятків, тож кнопку можна просто ввімкнути після відповіді
-            SendCommentButton.IsEnabled = false;
+            using var busy = UiBusy.Disable(SendCommentButton);
             var result = await commentService.AddAsync(taskId, NewCommentTextBox.Text, CurrentUserId);
-            SendCommentButton.IsEnabled = true;
 
             if (result.ShowIfFailed("Коментар не надіслано"))
             {
@@ -1084,9 +1282,8 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            DetailsSubmitReviewButton.IsEnabled = false;
+            using var busy = UiBusy.Disable(DetailsSubmitReviewButton);
             var result = await reviewService.SubmitForReviewAsync(taskId, CurrentUserId);
-            DetailsSubmitReviewButton.IsEnabled = true;
 
             if (result.ShowIfFailed("Не вдалося відправити на перевірку"))
             {
@@ -1151,14 +1348,15 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            ReviewApproveButton.IsEnabled = false;
-            ReviewRequestRevisionButton.IsEnabled = false;
+            // Кнопки вимкнені лише на час запиту; після успіху черга оновиться і вимкне їх сама (нічого не вибрано)
+            Result result;
+            using (UiBusy.Disable(ReviewApproveButton, ReviewRequestRevisionButton))
+            {
+                result = await reviewService.ApproveAsync(selected.TaskId, CurrentUserId);
+            }
 
-            var result = await reviewService.ApproveAsync(selected.TaskId, CurrentUserId);
             if (result.ShowIfFailed("Не вдалося прийняти завдання"))
             {
-                ReviewApproveButton.IsEnabled = true;
-                ReviewRequestRevisionButton.IsEnabled = true;
                 return;
             }
 
@@ -1174,14 +1372,14 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            ReviewApproveButton.IsEnabled = false;
-            ReviewRequestRevisionButton.IsEnabled = false;
+            Result result;
+            using (UiBusy.Disable(ReviewApproveButton, ReviewRequestRevisionButton))
+            {
+                result = await reviewService.RequestRevisionAsync(selected.TaskId, ReviewCommentTextBox.Text, CurrentUserId);
+            }
 
-            var result = await reviewService.RequestRevisionAsync(selected.TaskId, ReviewCommentTextBox.Text, CurrentUserId);
             if (result.ShowIfFailed("Не вдалося повернути завдання на доопрацювання"))
             {
-                ReviewApproveButton.IsEnabled = true;
-                ReviewRequestRevisionButton.IsEnabled = true;
                 return;
             }
 
@@ -1189,11 +1387,269 @@ namespace SoftwareEngineering.Client
             await LoadTasksAsync();
             await LoadReviewQueueAsync();
         }
-        // ---------- Профіль та налаштування ----------
+
+        // ---------- Створення завдання: вибір проєкту ----------
+
+        private async Task LoadProjectChoicesAsync()
+        {
+            var previousId = (ProjectComboBox.SelectedItem as ProjectModel)?.Id;
+
+            var result = await projectService.GetProjectsForNewTaskAsync(CurrentUserId);
+            if (result.ShowIfFailed("Не вдалося завантажити проєкти"))
+            {
+                return;
+            }
+
+            var projects = result.Value!;
+            ProjectComboBox.ItemsSource = projects;
+
+            // Пам'ятаємо останній вибраний проєкт, щоб не обирати його щоразу заново
+            ProjectComboBox.SelectedItem = projects.FirstOrDefault(project => project.Id == previousId) ?? projects.FirstOrDefault();
+
+            var hasProjects = projects.Count > 0;
+            ProjectComboBox.IsEnabled = hasProjects;
+            CreateTaskButton.IsEnabled = hasProjects;
+            NoProjectsHint.Visibility = hasProjects ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        // DatePicker повертає північ обраного дня; дедлайн «на сьогодні» тоді вже в минулому, тому беремо кінець дня
+        private static DateTime? EndOfDay(DateTime? date)
+        {
+            return date?.Date.AddDays(1).AddMinutes(-1);
+        }
+
+        private async Task OpenTaskDetailsAsync(Guid taskId)
+        {
+            var details = await taskService.GetDetailsAsync(taskId, CurrentUserId);
+            if (details.ShowIfFailed("Деталі недоступні"))
+            {
+                return;
+            }
+
+            ShowTaskDetails(details.Value!);
+            await LoadSubtasksAsync();
+            await LoadCommentsAsync();
+            ShowPage("Details");
+        }
+
+        // ---------- Календар ----------
+
+        private static readonly CultureInfo UkrainianCulture = CultureInfo.GetCultureInfo("uk-UA");
+
+        private DateTime calendarMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+        private DateTime calendarSelectedDay = DateTime.Today;
+
+        private void RenderCalendar()
+        {
+            // Обраний день лишається обраним, якщо він у цьому місяці; інакше — перше число
+            if (calendarSelectedDay.Year != calendarMonth.Year || calendarSelectedDay.Month != calendarMonth.Month)
+            {
+                calendarSelectedDay = calendarMonth;
+            }
+
+            var days = TaskCalendar.BuildMonth(allTasks, calendarMonth.Year, calendarMonth.Month, DateTime.Now, calendarSelectedDay);
+            CalendarDaysControl.ItemsSource = days;
+            CalendarMonthTitle.Text = Capitalize(calendarMonth.ToString("MMMM yyyy", UkrainianCulture));
+            ShowCalendarDay(days.Single(day => day.IsSelected));
+        }
+
+        private void ShowCalendarDay(CalendarDayModel day)
+        {
+            calendarSelectedDay = day.Date;
+            CalendarSelectedDayTitle.Text = Capitalize(day.Date.ToString("dddd, d MMMM", UkrainianCulture));
+
+            var now = DateTime.UtcNow;
+            CalendarDayTasksList.ItemsSource = day.Tasks
+                .Select(task => new CalendarTaskRow(
+                    task.Id,
+                    task.TaskCode,
+                    task.Title,
+                    task.Deadline!.Value.ToLocalTime().ToString("HH:mm"),
+                    StatusText(task.Status),
+                    task.Status != TaskItemStatus.Done && task.Deadline.Value.ToUniversalTime() < now))
+                .ToList();
+            CalendarNoTasksText.Visibility = day.Tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void CalendarDay_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not CalendarDayModel day)
+            {
+                return;
+            }
+
+            // Перебудовуємо сітку, щоб підсвітити обраний день; клік по дню сусіднього місяця переходить на той місяць
+            calendarSelectedDay = day.Date;
+            calendarMonth = new DateTime(day.Date.Year, day.Date.Month, 1);
+            RenderCalendar();
+        }
+
+        private void CalendarPrevMonth_Click(object sender, RoutedEventArgs e)
+        {
+            calendarMonth = calendarMonth.AddMonths(-1);
+            RenderCalendar();
+        }
+
+        private void CalendarNextMonth_Click(object sender, RoutedEventArgs e)
+        {
+            calendarMonth = calendarMonth.AddMonths(1);
+            RenderCalendar();
+        }
+
+        private void CalendarToday_Click(object sender, RoutedEventArgs e)
+        {
+            calendarSelectedDay = DateTime.Today;
+            calendarMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            RenderCalendar();
+        }
+
+        private async void CalendarDayTasks_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (CalendarDayTasksList.SelectedItem is CalendarTaskRow row)
+            {
+                await OpenTaskDetailsAsync(row.Id);
+            }
+        }
+
+        private static string Capitalize(string text)
+        {
+            return string.IsNullOrEmpty(text) ? text : char.ToUpper(text[0], UkrainianCulture) + text[1..];
+        }
+
+        // Рядок списку завдань обраного дня: усе вже відформатовано для показу
+        private sealed record CalendarTaskRow(Guid Id, string Code, string Title, string Time, string Status, bool IsOverdue);
+
+        // ---------- Опис завдання: виділення, копіювання, клікабельні посилання ----------
+
+        private string? shownDescription;
+
+        private void ShowDescription(string? description)
+        {
+            shownDescription = string.IsNullOrWhiteSpace(description) ? null : description;
+            CopyDescriptionButton.IsEnabled = shownDescription != null;
+            CopyDescriptionButton.Content = "Копіювати";
+
+            var paragraph = new Paragraph { Margin = new Thickness(0) };
+            if (shownDescription == null)
+            {
+                var placeholder = new Run("Немає опису") { FontStyle = FontStyles.Italic };
+                placeholder.SetResourceReference(TextElement.ForegroundProperty, "Brush.TextFaint");
+                paragraph.Inlines.Add(placeholder);
+            }
+            else
+            {
+                foreach (var segment in TextLinks.Split(shownDescription))
+                {
+                    if (segment.Link == null)
+                    {
+                        AddTextWithLineBreaks(paragraph.Inlines, segment.Text);
+                        continue;
+                    }
+
+                    var link = new Hyperlink(new Run(segment.Text))
+                    {
+                        NavigateUri = segment.Link,
+                        ToolTip = segment.Link.AbsoluteUri,
+                        Cursor = System.Windows.Input.Cursors.Hand,
+                    };
+                    link.RequestNavigate += OpenLinkInBrowser;
+                    paragraph.Inlines.Add(link);
+                }
+            }
+
+            DetailsDescriptionBox.Document = new FlowDocument(paragraph) { PagePadding = new Thickness(0) };
+        }
+
+        // Переноси рядків з опису зберігаємо явними LineBreak, щоб абзаци виглядали так, як їх ввели
+        private static void AddTextWithLineBreaks(InlineCollection inlines, string text)
+        {
+            var lines = text.Replace("\r\n", "\n").Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (i > 0)
+                {
+                    inlines.Add(new LineBreak());
+                }
+
+                if (lines[i].Length > 0)
+                {
+                    inlines.Add(new Run(lines[i]));
+                }
+            }
+        }
+
+        // Те саме, що webbrowser.open у Python: оболонка Windows відкриває адресу в браузері за замовчуванням.
+        // TextLinks пропускає лише http(s), тож сюди не потрапить file:// чи інша схема, яка запустила б програму.
+        private void OpenLinkInBrowser(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+            Log.Information("Відкрито посилання з опису завдання {TaskId}: {Host}", detailsTaskId, e.Uri.Host);
+            e.Handled = true;
+        }
+
+        private async void CopyDescription_Click(object sender, RoutedEventArgs e)
+        {
+            if (shownDescription == null)
+            {
+                return;
+            }
+
+            Clipboard.SetText(shownDescription);
+
+            // Коротке підтвердження на самій кнопці замість вікна з повідомленням
+            CopyDescriptionButton.Content = "Скопійовано ✓";
+            await Task.Delay(TimeSpan.FromSeconds(1.5));
+            CopyDescriptionButton.Content = "Копіювати";
+        }
+
+        // ---------- Тема оформлення ----------
+
+        private bool syncingThemeControls;
+
+        private void OnThemeChanged(object? sender, EventArgs e)
+        {
+            SyncThemeControls();
+        }
+
+        private void SyncThemeControls()
+        {
+            // Програмна зміна IsChecked теж викликає Checked — прапорець не дає їй знову зберегти тему
+            syncingThemeControls = true;
+            foreach (var option in ThemeOptions.Children.OfType<RadioButton>())
+            {
+                option.IsChecked = option.Tag as string == ThemeManager.Preference.ToString();
+            }
+
+            syncingThemeControls = false;
+
+            ThemeToggleButton.Content = ThemeManager.IsDark ? "☀  Світла тема" : "☾  Темна тема";
+        }
+
+        private void ThemeRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (syncingThemeControls || sender is not RadioButton { Tag: string tag } || !Enum.TryParse(tag, out AppTheme theme))
+            {
+                return;
+            }
+
+            if (theme != ThemeManager.Preference)
+            {
+                ThemeManager.SetPreference(theme);
+            }
+        }
+
+        private void ThemeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            // З темної — на світлу; зі світлої — на ту темну, яку обирали останньою
+            ThemeManager.SetPreference(ThemeManager.IsDark ? AppTheme.Light : ThemeManager.LastDarkTheme);
+        }
+
+        // ---------- Профіль і пароль ----------
+
         private void LoadProfileForm()
         {
-            var user = userSession.CurrentUser;
-            if (user is null)
+            if (userSession.CurrentUser is not { } user)
             {
                 return;
             }
@@ -1216,59 +1672,54 @@ namespace SoftwareEngineering.Client
 
         private async void SaveProfile_Click(object sender, RoutedEventArgs e)
         {
-            SaveProfileButton.IsEnabled = false;
-            var result = await authService.UpdateProfileAsync(
-                CurrentUserId,
-                ProfileFullNameTextBox.Text,
-                ProfileEmailTextBox.Text);
-            SaveProfileButton.IsEnabled = true;
+            Result<UserModel> result;
+            using (UiBusy.Disable(SaveProfileButton))
+            {
+                result = await authService.UpdateProfileAsync(CurrentUserId, ProfileFullNameTextBox.Text, ProfileEmailTextBox.Text);
+            }
 
-            if (result.ShowIfFailed("Не вдалося оновити профіль"))
+            if (result.ShowIfFailed("Профіль не оновлено"))
             {
                 return;
             }
 
-            var updatedUser = result.Value!;
-            userSession.SetUser(updatedUser);
-
-            // Оновлюємо відображення імені та ініціалів у бічній панелі та шапці профілю
-            UserNameText.Text = updatedUser.FullName;
-            UserInitialsText.Text = GetInitials(updatedUser.FullName);
+            // Нові ім'я та email — у сесію, бічну панель і саму форму
+            var updated = result.Value!;
+            userSession.SetUser(updated);
+            UserNameText.Text = updated.FullName;
+            UserInitialsText.Text = GetInitials(updated.FullName);
             LoadProfileForm();
 
-            MessageBox.Show("Дані профілю успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Дані профілю оновлено.", "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private async void ChangePassword_Click(object sender, RoutedEventArgs e)
         {
-            var oldPassword = OldPasswordBox.Password;
-            var newPassword = NewPasswordBox.Password;
-            var confirmPassword = ConfirmPasswordBox.Password;
-
-            if (newPassword != confirmPassword)
+            // Збіг підтвердження — суто перевірка форми, сервісу її не передаємо
+            if (NewPasswordBox.Password != ConfirmPasswordBox.Password)
             {
-                MessageBox.Show("Новий пароль та підтвердження не збігаються.", "Перевірка даних", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Новий пароль і підтвердження не збігаються.", "Пароль не змінено", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            ChangePasswordButton.IsEnabled = false;
-            var result = await authService.ChangePasswordAsync(CurrentUserId, oldPassword, newPassword);
-            ChangePasswordButton.IsEnabled = true;
+            Result result;
+            using (UiBusy.Disable(ChangePasswordButton))
+            {
+                result = await authService.ChangePasswordAsync(CurrentUserId, OldPasswordBox.Password, NewPasswordBox.Password);
+            }
 
-            if (result.ShowIfFailed("Не вдалося змінити пароль"))
+            if (result.ShowIfFailed("Пароль не змінено"))
             {
                 return;
             }
+
+            // Старий «Запам'ятати мене» прив'язаний до старого пароля — на цьому комп'ютері перевипускаємо його
+            await ((App)Application.Current).RefreshRememberedSessionAsync(CurrentUserId);
 
             OldPasswordBox.Clear();
             NewPasswordBox.Clear();
             ConfirmPasswordBox.Clear();
-
-            MessageBox.Show(
-                "Пароль успішно змінено!\nЗбережена сесія «Запам'ятати мене» на цьому пристрої стала недійсною.",
-                "Успіх",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            MessageBox.Show("Пароль змінено.", "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }

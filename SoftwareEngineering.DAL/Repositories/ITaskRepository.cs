@@ -5,15 +5,12 @@ namespace SoftwareEngineering.DAL.Repositories;
 public interface ITaskRepository
 {
     /// <summary>
-    /// Коди всіх наявних завдань проєкту (номери видалених завдань сюди вже не потрапляють).
+    /// Зберігає нове завдання разом з його підзадачами і присвоює йому код.
+    /// generateCode отримує коди всіх наявних завдань проєкту і повертає код для нового.
+    /// Проєкт блокується до кінця збереження, тому два одночасні створення в одному проєкті
+    /// виконуються по черзі й не можуть отримати однаковий код.
     /// </summary>
-    Task<IReadOnlyList<string>> GetTaskCodesAsync(Guid projectId);
-
-    /// <summary>
-    /// Зберігає нове завдання разом з його підзадачами.
-    /// Кидає DuplicateTaskCodeException, якщо код уже зайнятий у проєкті.
-    /// </summary>
-    Task AddAsync(TaskItem task);
+    Task AddAsync(TaskItem task, Func<IReadOnlyList<string>, string> generateCode);
 
     Task<IEnumerable<TaskItem>> GetAsync();
 

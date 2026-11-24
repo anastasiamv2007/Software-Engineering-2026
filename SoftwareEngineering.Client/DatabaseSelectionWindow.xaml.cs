@@ -156,7 +156,16 @@ public partial class DatabaseSelectionWindow : Window
         string connectionString = connection.BuildConnectionString();
         Log.Information("Підключення до збереженої БД {ConnectionName} ({Summary})", connection.DisplayName, connection.Summary);
 
-        SetBusy(true, $"Підключення до «{connection.DisplayName}»...");
+        // Якщо далі вилетить виняток (наприклад, БД впала під час входу), вікно не лишиться заблокованим
+        using var busy = UiBusy.Scope(
+            () => SetBusy(true, $"Підключення до «{connection.DisplayName}»..."),
+            () =>
+            {
+                if (isBusy)
+                {
+                    SetBusy(false);
+                }
+            });
 
         if (!await dbService.TestConnectionAsync(connectionString))
         {

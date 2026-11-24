@@ -113,25 +113,6 @@ public class TaskAssignmentTests
     }
 
     [Fact]
-    public async Task AssignAsync_RepositoryFails_ReturnsUnexpectedWithoutThrowing()
-    {
-        // Arrange
-        var task = this.SetupTask();
-        var assigneeId = Guid.NewGuid();
-        this.SetupRole(this.currentUserId, ProjectRole.Owner);
-        this.SetupRole(assigneeId, ProjectRole.CoExecutor);
-        this.taskRepositoryMock
-            .Setup(repository => repository.UpdateAsync(It.IsAny<TaskItem>()))
-            .ThrowsAsync(new InvalidOperationException());
-
-        // Act
-        var result = await this.CreateService().AssignAsync(task.Id, assigneeId, this.currentUserId);
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-    }
-
-    [Fact]
     public async Task GetAssigneeCandidatesAsync_Owner_ReturnsProjectUsers()
     {
         // Arrange

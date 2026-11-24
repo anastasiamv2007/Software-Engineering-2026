@@ -84,6 +84,25 @@ public class UserProfileTests
         this.userRepositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // Довжини як у стовпцях users: довше БД не прийме, тож відмова має прийти від сервісу, а не винятком від БД
+    [Theory]
+    [InlineData(151, 10)]
+    [InlineData(10, 256)]
+    public async Task UpdateProfileAsync_TooLongNameOrEmail_ReturnsValidation(int nameLength, int emailLength)
+    {
+        // Arrange
+        var fullName = new string('І', nameLength);
+        var email = new string('a', emailLength - "@test.com".Length) + "@test.com";
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.UpdateProfileAsync(this.user.Id, fullName, email);
+
+        // Assert
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+        this.userRepositoryMock.Verify(repository => repository.UpdateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task UpdateProfileAsync_EmailTakenByAnotherUser_ReturnsDuplicate()
     {

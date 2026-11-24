@@ -1,69 +1,37 @@
-﻿using Serilog;
+﻿using System.Runtime.CompilerServices;
+using Serilog;
 using SoftwareEngineering.BLL.Results;
 
 namespace SoftwareEngineering.BLL.Services;
 
 /// <summary>
-/// Базовий клас сервісів BLL. Єдине місце, де сервіси перехоплюють винятки:
-/// очікувані помилки (валідація, права, «не знайдено») методи повертають як Result.Fail,
-/// а непередбачені (наприклад, недоступна БД) ExecuteAsync перетворює на ErrorType.Unexpected.
+/// Базовий клас сервісів BLL.
+/// Очікувані відмови (валідація, права, «не знайдено») сервіс повертає через Fail — вони одразу логуються як Warning
+/// там, де виникли. Винятки сервіси не перехоплюють: непередбачена помилка (наприклад, недоступна БД)
+/// доходить до глобального обробника в App, який логує її як Error і показує повідомлення.
 /// </summary>
 public abstract class BaseService
 {
-    protected const string UnexpectedErrorMessage = "Сталася внутрішня помилка. Спробуйте ще раз.";
-
     protected ILogger Logger => Log.ForContext(this.GetType());
 
     /// <summary>
-    /// Виконує дію сервісу: логує результат у Seq і не випускає винятки назовні.
+    /// Повертає відмову і логує її як Warning з назвою методу, у якому вона виникла.
     /// </summary>
-    protected async Task<Result<T>> ExecuteAsync<T>(string actionName, Func<Task<Result<T>>> action)
+    protected Result Fail(ErrorType type, string message, [CallerMemberName] string action = "")
     {
-        try
-        {
-            this.Logger.Debug("Початок виконання дії: {ActionName}", actionName);
-            var result = await action();
-            this.LogOutcome(actionName, result);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час виконання дії: {ActionName}", actionName);
-            return Result.Fail<T>(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        this.LogFailure(action, type, message);
+        return Result.Fail(type, message);
     }
 
-    /// <inheritdoc cref="ExecuteAsync{T}(string, Func{Task{Result{T}}})"/>
-    protected async Task<Result> ExecuteAsync(string actionName, Func<Task<Result>> action)
+    /// <inheritdoc cref="Fail(ErrorType, string, string)"/>
+    protected Result<T> Fail<T>(ErrorType type, string message, [CallerMemberName] string action = "")
     {
-        try
-        {
-            this.Logger.Debug("Початок виконання дії: {ActionName}", actionName);
-            var result = await action();
-            this.LogOutcome(actionName, result);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            this.Logger.Error(ex, "Критична помилка під час виконання дії: {ActionName}", actionName);
-            return Result.Fail(ErrorType.Unexpected, UnexpectedErrorMessage);
-        }
+        this.LogFailure(action, type, message);
+        return Result.Fail<T>(type, message);
     }
 
-    // Відмова (валідація, права, «не знайдено») — Warning з типом і текстом, щоб у Seq було видно причину
-    private void LogOutcome(string actionName, Result result)
+    private void LogFailure(string action, ErrorType type, string message)
     {
-        if (result.IsFailure)
-        {
-            this.Logger.Warning(
-                "Дію {ActionName} відхилено ({ErrorType}): {ErrorMessage}",
-                actionName,
-                result.Error!.Type,
-                result.Error.Message);
-        }
-        else
-        {
-            this.Logger.Information("Успішно виконано дію: {ActionName}", actionName);
-        }
+        this.Logger.Warning("Дію {Action} відхилено ({ErrorType}): {ErrorMessage}", action, type, message);
     }
 }
