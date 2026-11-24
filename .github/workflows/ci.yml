@@ -1,0 +1,63 @@
+# CI: на кожен push і pull request у dev/main GitHub сам збирає рішення і запускає всі тести.
+# Якщо збірка або хоч один тест падають — у PR з'являється червоний хрестик, і це видно ще до злиття.
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  # Кнопка «Run workflow» на вкладці Actions — запустити вручну
+  workflow_dispatch:
+
+# Новий push у ту саму гілку скасовує ще не завершений попередній запуск
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Workflow тільки читає код, нічого не пише в репозиторій
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    # Windows, а не Linux: WPF-клієнт (net8.0-windows) і шифрування паролів DPAPI в тестах працюють лише на Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # NuGet-пакети між запусками зберігаються в кеші, щоб не качати їх щоразу
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore SoftwareEngineering.sln
+
+      # TreatWarningsAsErrors уже ввімкнено в .csproj, тож будь-яке попередження теж валить збірку
+      - name: Build
+        run: dotnet build SoftwareEngineering.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test SoftwareEngineering.sln --no-build --configuration Release --logger trx --results-directory TestResults
+
+      # Результати тестів можна завантажити зі сторінки запуску, навіть якщо тести впали
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+          retention-days: 14
