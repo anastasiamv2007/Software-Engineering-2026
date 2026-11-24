@@ -973,11 +973,72 @@
                     </Border>
                 </Grid>
             </Grid>
-            <Grid x:Name="Page_Settings" Visibility="Collapsed">
-                <StackPanel>
+            <!-- НАЛАШТУВАННЯ: профіль, пароль, тема -->
+            <ScrollViewer x:Name="Page_Settings" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                <StackPanel MaxWidth="860" HorizontalAlignment="Left">
                     <TextBlock Text="Налаштування" Style="{StaticResource PageTitle}"/>
-                    <TextBlock Text="Параметри програми на цьому комп'ютері" Style="{StaticResource PageSubtitle}"/>
-                    <Border Style="{StaticResource Card}" HorizontalAlignment="Left" Width="460">
+                    <TextBlock Text="Особисті дані облікового запису, пароль і вигляд програми" Style="{StaticResource PageSubtitle}"/>
+
+                    <!-- Профіль: ім'я та email -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                <Border CornerRadius="24" Width="48" Height="48" Background="{DynamicResource Brush.Accent}" Margin="0,0,14,0">
+                                    <TextBlock x:Name="ProfileAvatarText" Text="?" Foreground="White" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock x:Name="ProfileHeaderNameText" Text="Користувач" FontSize="16" FontWeight="Bold"/>
+                                    <TextBlock x:Name="ProfileMetaText" FontSize="12" Foreground="{DynamicResource Brush.TextMuted}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock Text="Повне ім'я *" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="ProfileFullNameTextBox" Height="34" VerticalContentAlignment="Center" Padding="8,0" MaxLength="150" Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Електронна пошта *" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="ProfileEmailTextBox" Height="34" VerticalContentAlignment="Center" Padding="8,0" MaxLength="255" Margin="0,0,0,16"/>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Скасувати" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="ResetProfileForm_Click"/>
+                                <Button x:Name="SaveProfileButton" Content="Зберегти зміни" Style="{StaticResource PrimaryButton}" Click="SaveProfile_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Зміна пароля -->
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="Зміна пароля" FontSize="16" FontWeight="Bold" Margin="0,0,0,4"/>
+                            <TextBlock Text="«Запам'ятати мене» на цьому комп'ютері залишиться, а на інших пристроях доведеться увійти з новим паролем."
+                                       FontSize="12" Foreground="{DynamicResource Brush.TextMuted}" TextWrapping="Wrap" Margin="0,0,0,14"/>
+
+                            <TextBlock Text="Поточний пароль *" Style="{StaticResource FieldLabel}"/>
+                            <PasswordBox x:Name="OldPasswordBox" Height="34" VerticalContentAlignment="Center" Padding="8,0" Margin="0,0,0,12"/>
+
+                            <Grid Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Новий пароль (мін. 6 символів) *" Style="{StaticResource FieldLabel}"/>
+                                    <PasswordBox x:Name="NewPasswordBox" Height="34" VerticalContentAlignment="Center" Padding="8,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Підтвердження нового пароля *" Style="{StaticResource FieldLabel}"/>
+                                    <PasswordBox x:Name="ConfirmPasswordBox" Height="34" VerticalContentAlignment="Center" Padding="8,0"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="ChangePasswordButton" Content="Змінити пароль" Style="{StaticResource PrimaryButton}" Click="ChangePassword_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Тема оформлення -->
+                    <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Text="Тема оформлення" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
                             <!-- Tag — назва теми з AppTheme; код просто перебирає ці перемикачі -->
@@ -993,7 +1054,7 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
-            </Grid>
+            </ScrollViewer>
 
         </Grid>
     </Grid>

@@ -10,4 +10,8 @@ public interface IUserRepository {
     /// Додає користувача і одразу зберігає зміни в БД.
     /// </summary>
     Task AddAsync(User user, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Оновлює дані користувача в БД (FullName, Email, PasswordHash).
+    /// </summary>
+    Task UpdateAsync(User user, CancellationToken cancellationToken = default);
 }

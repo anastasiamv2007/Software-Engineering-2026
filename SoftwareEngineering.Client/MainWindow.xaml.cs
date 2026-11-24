@@ -25,6 +25,7 @@ namespace SoftwareEngineering.Client
         private readonly ISubtaskService subtaskService;
         private readonly ICommentService commentService;
         private readonly IReviewService reviewService;
+        private readonly IAuthService authService;
         private Guid? detailsTaskId;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
@@ -36,7 +37,7 @@ namespace SoftwareEngineering.Client
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService, IStatisticsService statisticsService, IReviewService reviewService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService, IStatisticsService statisticsService, IReviewService reviewService, IAuthService authService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
@@ -46,6 +47,7 @@ namespace SoftwareEngineering.Client
             this.subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
             this.commentService = commentService ?? throw new ArgumentNullException(nameof(commentService));
             this.reviewService = reviewService ?? throw new ArgumentNullException(nameof(reviewService));
+            this.authService = authService ?? throw new ArgumentNullException(nameof(authService));
             this.statisticsService = statisticsService ?? throw new ArgumentNullException(nameof(statisticsService));
 
             BuildCategoryPalette();
@@ -330,6 +332,11 @@ namespace SoftwareEngineering.Client
             if (page == "Calendar")
             {
                 RenderCalendar();
+            }
+
+            if (page == "Settings")
+            {
+                LoadProfileForm();
             }
         }
 
@@ -1636,6 +1643,83 @@ namespace SoftwareEngineering.Client
         {
             // З темної — на світлу; зі світлої — на ту темну, яку обирали останньою
             ThemeManager.SetPreference(ThemeManager.IsDark ? AppTheme.Light : ThemeManager.LastDarkTheme);
+        }
+
+        // ---------- Профіль і пароль ----------
+
+        private void LoadProfileForm()
+        {
+            if (userSession.CurrentUser is not { } user)
+            {
+                return;
+            }
+
+            ProfileFullNameTextBox.Text = user.FullName;
+            ProfileEmailTextBox.Text = user.Email;
+            ProfileHeaderNameText.Text = user.FullName;
+            ProfileAvatarText.Text = GetInitials(user.FullName);
+            ProfileMetaText.Text = $"{user.Email} · у системі з {user.CreatedAt.ToLocalTime():dd.MM.yyyy}";
+
+            OldPasswordBox.Clear();
+            NewPasswordBox.Clear();
+            ConfirmPasswordBox.Clear();
+        }
+
+        private void ResetProfileForm_Click(object sender, RoutedEventArgs e)
+        {
+            LoadProfileForm();
+        }
+
+        private async void SaveProfile_Click(object sender, RoutedEventArgs e)
+        {
+            Result<UserModel> result;
+            using (UiBusy.Disable(SaveProfileButton))
+            {
+                result = await authService.UpdateProfileAsync(CurrentUserId, ProfileFullNameTextBox.Text, ProfileEmailTextBox.Text);
+            }
+
+            if (result.ShowIfFailed("Профіль не оновлено"))
+            {
+                return;
+            }
+
+            // Нові ім'я та email — у сесію, бічну панель і саму форму
+            var updated = result.Value!;
+            userSession.SetUser(updated);
+            UserNameText.Text = updated.FullName;
+            UserInitialsText.Text = GetInitials(updated.FullName);
+            LoadProfileForm();
+
+            MessageBox.Show("Дані профілю оновлено.", "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private async void ChangePassword_Click(object sender, RoutedEventArgs e)
+        {
+            // Збіг підтвердження — суто перевірка форми, сервісу її не передаємо
+            if (NewPasswordBox.Password != ConfirmPasswordBox.Password)
+            {
+                MessageBox.Show("Новий пароль і підтвердження не збігаються.", "Пароль не змінено", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            Result result;
+            using (UiBusy.Disable(ChangePasswordButton))
+            {
+                result = await authService.ChangePasswordAsync(CurrentUserId, OldPasswordBox.Password, NewPasswordBox.Password);
+            }
+
+            if (result.ShowIfFailed("Пароль не змінено"))
+            {
+                return;
+            }
+
+            // Старий «Запам'ятати мене» прив'язаний до старого пароля — на цьому комп'ютері перевипускаємо його
+            await ((App)Application.Current).RefreshRememberedSessionAsync(CurrentUserId);
+
+            OldPasswordBox.Clear();
+            NewPasswordBox.Clear();
+            ConfirmPasswordBox.Clear();
+            MessageBox.Show("Пароль змінено.", "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }

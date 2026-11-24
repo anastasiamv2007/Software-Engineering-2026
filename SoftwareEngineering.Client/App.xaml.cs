@@ -156,6 +156,18 @@ public partial class App : Application
         setupService.RememberSession(connectionId, session.Value!);
     }
 
+    /// <summary>
+    /// Після зміни пароля: якщо на цьому комп'ютері збережено вхід цього користувача, перевипускаємо його
+    /// з новим відбитком пароля. Інакше наступний запуск попросив би увійти, хоча пароль щойно підтверджено.
+    /// </summary>
+    public async Task RefreshRememberedSessionAsync(Guid userId)
+    {
+        if (CurrentConnectionId is { } connectionId && setupService.GetRememberedSession(connectionId)?.UserId == userId)
+        {
+            await UpdateRememberedSessionAsync(userId, remember: true);
+        }
+    }
+
     private void ForgetCurrentSession()
     {
         if (CurrentConnectionId is { } connectionId)

@@ -37,4 +37,11 @@ public class UserRepository : IUserRepository {
         context.Users.Add(user);
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task UpdateAsync(User user, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        context.Users.Update(user);
+        await context.SaveChangesAsync(cancellationToken);
+    }
 }

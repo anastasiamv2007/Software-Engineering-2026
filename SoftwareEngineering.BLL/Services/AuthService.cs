@@ -13,6 +13,11 @@ public class AuthService : BaseService, IAuthService
 {
     private const int MinPasswordLength = 6;
 
+    // Обмеження стовпців users (UserConfiguration): довший текст БД однаково не прийме
+    private const int MaxFullNameLength = 150;
+    private const int MaxEmailLength = 255;
+    private const string UserNotFoundMessage = "Користувача не знайдено.";
+
     // Користувачу — одне загальне повідомлення, щоб не підказувати, чи існує такий email
     private const string InvalidCredentialsMessage = "Невірний email або пароль.";
 
@@ -94,8 +99,83 @@ public class AuthService : BaseService, IAuthService
     {
         var user = await this.userRepository.GetByIdAsync(userId, cancellationToken);
         return user is null
-            ? this.Fail<UserModel>(ErrorType.NotFound, "Користувача не знайдено.")
+            ? this.Fail<UserModel>(ErrorType.NotFound, UserNotFoundMessage)
             : Result.Ok(ToModel(user));
+    }
+
+    public async Task<Result<UserModel>> UpdateProfileAsync(Guid userId, string fullName, string email, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            return this.Fail<UserModel>(ErrorType.Validation, "Ім'я користувача не може бути порожнім.");
+        }
+
+        if (fullName.Trim().Length > MaxFullNameLength)
+        {
+            return this.Fail<UserModel>(ErrorType.Validation, $"Ім'я не може бути довшим за {MaxFullNameLength} символів.");
+        }
+
+        if (string.IsNullOrWhiteSpace(email) || !EmailRegex.IsMatch(email.Trim()) || email.Trim().Length > MaxEmailLength)
+        {
+            return this.Fail<UserModel>(ErrorType.Validation, "Введено некоректний формат електронної пошти.");
+        }
+
+        var user = await this.userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return this.Fail<UserModel>(ErrorType.NotFound, UserNotFoundMessage);
+        }
+
+        // Той самий email у іншого користувача — відмова; власний (навіть в іншому регістрі) можна лишити
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var owner = await this.userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
+        if (owner is not null && owner.Id != userId)
+        {
+            return this.Fail<UserModel>(ErrorType.Duplicate, "Користувач із такою електронною поштою вже зареєстрований.");
+        }
+
+        user.FullName = fullName.Trim();
+        user.Email = normalizedEmail;
+        await this.userRepository.UpdateAsync(user, cancellationToken);
+
+        this.Logger.Information("Оновлено профіль користувача {UserId}", user.Id);
+        return Result.Ok(ToModel(user));
+    }
+
+    public async Task<Result> ChangePasswordAsync(Guid userId, string oldPassword, string newPassword, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(oldPassword))
+        {
+            return this.Fail(ErrorType.Validation, "Введіть поточний пароль.");
+        }
+
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < MinPasswordLength)
+        {
+            return this.Fail(ErrorType.Validation, $"Новий пароль повинен містити щонайменше {MinPasswordLength} символів.");
+        }
+
+        if (oldPassword == newPassword)
+        {
+            return this.Fail(ErrorType.Validation, "Новий пароль повинен відрізнятися від поточного.");
+        }
+
+        var user = await this.userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return this.Fail(ErrorType.NotFound, UserNotFoundMessage);
+        }
+
+        if (!PasswordHasher.Verify(oldPassword, user.PasswordHash))
+        {
+            return this.Fail(ErrorType.Validation, "Невірний поточний пароль.");
+        }
+
+        // Новий хеш змінює і PasswordStamp, тож збережений «Запам'ятати мене» на інших пристроях перестане діяти
+        user.PasswordHash = PasswordHasher.Hash(newPassword);
+        await this.userRepository.UpdateAsync(user, cancellationToken);
+
+        this.Logger.Information("Змінено пароль користувача {UserId}", user.Id);
+        return Result.Ok();
     }
 
     public async Task<Result<RememberedSessionModel>> CreateRememberedSessionAsync(Guid userId, CancellationToken cancellationToken = default)
