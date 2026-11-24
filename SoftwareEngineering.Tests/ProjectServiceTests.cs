@@ -8,6 +8,7 @@ using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Entities;
+using SoftwareEngineering.DAL.Enums;
 using SoftwareEngineering.DAL.Repositories;
 
 namespace SoftwareEngineering.Tests;
@@ -356,40 +357,59 @@ public class ProjectServiceTests
     }
 
     // ==========================================
-    // 6. GET OR CREATE
+    // 6. ПРОЄКТИ ДЛЯ ФОРМИ СТВОРЕННЯ ЗАВДАННЯ
     // ==========================================
 
+    // У списку лише проєкти, де користувач може створювати завдання: читач свій проєкт там не побачить
     [Fact]
-    public async Task GetOrCreateByNameAsync_ExistingProject_ReturnsItWithoutCreating()
+    public async Task GetProjectsForNewTaskAsync_ReturnsOnlyOwnerAndCoExecutorProjects()
     {
         // Arrange
-        var existing = new Project { Id = Guid.NewGuid(), Name = "Лаб", OwnerId = Guid.NewGuid() };
-        this.repositoryMock.Setup(repo => repo.FindByNameAsync("Лаб")).ReturnsAsync(existing);
+        var userId = Guid.NewGuid();
+        var owned = new Project { Id = Guid.NewGuid(), Name = "Мій", OwnerId = userId };
+        var shared = new Project { Id = Guid.NewGuid(), Name = "Командний", OwnerId = Guid.NewGuid() };
+        var readOnly = new Project { Id = Guid.NewGuid(), Name = "Лише читаю", OwnerId = Guid.NewGuid() };
+        this.repositoryMock.Setup(repo => repo.GetAllByUserIdAsync(userId)).ReturnsAsync(new[] { owned, shared, readOnly });
+        this.repositoryMock.Setup(repo => repo.GetMemberRoleAsync(owned.Id, userId)).ReturnsAsync(ProjectRole.Owner);
+        this.repositoryMock.Setup(repo => repo.GetMemberRoleAsync(shared.Id, userId)).ReturnsAsync(ProjectRole.CoExecutor);
+        this.repositoryMock.Setup(repo => repo.GetMemberRoleAsync(readOnly.Id, userId)).ReturnsAsync(ProjectRole.Reviewer);
         var service = this.CreateService();
 
         // Act
-        var result = await service.GetOrCreateByNameAsync("  Лаб  ", Guid.NewGuid());
+        var result = await service.GetProjectsForNewTaskAsync(userId);
 
         // Assert
-        Assert.Equal(existing.Id, result.Value!.Id);
-        this.repositoryMock.Verify(repo => repo.AddAsync(It.IsAny<Project>()), Times.Never);
+        Assert.Equal(new[] { "Командний", "Мій" }, result.Value!.Select(project => project.Name));
     }
 
     [Fact]
-    public async Task GetOrCreateByNameAsync_NewName_CreatesProject()
+    public async Task GetProjectsForNewTaskAsync_NoProjects_ReturnsEmptyList()
     {
         // Arrange
-        this.CaptureSavedProject();
-        var ownerId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        this.repositoryMock.Setup(repo => repo.GetAllByUserIdAsync(userId)).ReturnsAsync(Array.Empty<Project>());
         var service = this.CreateService();
 
         // Act
-        var result = await service.GetOrCreateByNameAsync("Новий", ownerId);
+        var result = await service.GetProjectsForNewTaskAsync(userId);
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal("Новий", this.savedProject!.Name);
-        Assert.Equal(ownerId, this.savedProject.OwnerId);
+        Assert.Empty(result.Value!);
+    }
+
+    [Fact]
+    public async Task GetProjectsForNewTaskAsync_EmptyUserId_ReturnsValidation()
+    {
+        // Arrange
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.GetProjectsForNewTaskAsync(Guid.Empty);
+
+        // Assert
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+        this.repositoryMock.Verify(repo => repo.GetAllByUserIdAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     // ==========================================

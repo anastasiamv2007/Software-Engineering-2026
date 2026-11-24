@@ -128,28 +128,27 @@ public class ProjectService : BaseService, IProjectService
         return Result.Ok();
     }
 
-    public async Task<Result<ProjectModel>> GetOrCreateByNameAsync(string name, Guid ownerId)
+    public async Task<Result<IReadOnlyList<ProjectModel>>> GetProjectsForNewTaskAsync(Guid userId)
     {
-        var nameError = ValidateName(name);
-        if (nameError is not null)
+        if (userId == Guid.Empty)
         {
-            return this.Fail<ProjectModel>(ErrorType.Validation, nameError);
+            return this.Fail<IReadOnlyList<ProjectModel>>(ErrorType.Validation, "Ідентифікатор користувача не вказано.");
         }
 
-        if (ownerId == Guid.Empty)
+        var projects = await this.projectRepository.GetAllByUserIdAsync(userId);
+        var allowed = new List<ProjectModel>();
+        foreach (var project in projects)
         {
-            return this.Fail<ProjectModel>(ErrorType.Validation, "Не вказано власника проєкту.");
+            // Те саме правило, що перевіряє TaskService.CreateAsync, тож у списку немає проєктів, де створення відхилять
+            var role = await this.projectRepository.GetMemberRoleAsync(project.Id, userId);
+            if (ProjectPermissions.CanCreateTasks(role))
+            {
+                allowed.Add(ToModel(project));
+            }
         }
 
-        var trimmedName = name.Trim();
-        var existing = await this.projectRepository.FindByNameAsync(trimmedName);
-        if (existing is not null)
-        {
-            return Result.Ok(ToModel(existing));
-        }
-
-        var project = await this.AddProjectAsync(trimmedName, ownerId);
-        return Result.Ok(ToModel(project));
+        IReadOnlyList<ProjectModel> ordered = allowed.OrderBy(project => project.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        return Result.Ok(ordered);
     }
 
     private static string? ValidateName(string? name)

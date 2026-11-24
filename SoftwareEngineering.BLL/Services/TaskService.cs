@@ -115,7 +115,7 @@ public class TaskService : BaseService, ITaskService
         }
 
         var role = await this.projectRepository.GetMemberRoleAsync(model.ProjectId, model.OwnerId);
-        if (role is not (ProjectRole.Owner or ProjectRole.CoExecutor))
+        if (!ProjectPermissions.CanCreateTasks(role))
         {
             return this.Fail<TaskModel>(ErrorType.Forbidden, "Створювати завдання можуть лише власник проєкту та співвиконавці.");
         }

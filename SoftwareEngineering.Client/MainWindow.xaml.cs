@@ -3,6 +3,7 @@ using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Enums;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -149,6 +150,16 @@ namespace SoftwareEngineering.Client
             {
                 await LoadReviewQueueAsync();
             }
+
+            if (page == "Create")
+            {
+                await LoadProjectChoicesAsync();
+            }
+
+            if (page == "Calendar")
+            {
+                RenderCalendar();
+            }
         }
 
         private void CancelToTasks_Click(object sender, RoutedEventArgs e)
@@ -168,6 +179,11 @@ namespace SoftwareEngineering.Client
 
             allTasks = result.Value!;
             ApplyFilter();
+            if (Page_Calendar.Visibility == Visibility.Visible)
+            {
+                RenderCalendar();
+            }
+
             await UpdateStatsAsync(); ;
         }
 
@@ -343,19 +359,20 @@ namespace SoftwareEngineering.Client
                 priority = parsed;
             }
 
-            var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty, CurrentUserId);
-            if (project.ShowIfFailed("Завдання не створено"))
+            // Проєкт тільки зі списку: створювати проєкт «на льоту» з назви більше не можна
+            if (ProjectComboBox.SelectedItem is not ProjectModel project)
             {
+                MessageBox.Show("Оберіть проєкт зі списку.", "Завдання не створено", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             var created = await taskService.CreateAsync(new TaskModel
             {
-                ProjectId = project.Value!.Id,
+                ProjectId = project.Id,
                 OwnerId = CurrentUserId,
                 Title = TitleTextBox.Text?.Trim() ?? string.Empty,
                 Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
-                Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
+                Deadline = EndOfDay(DeadlineDatePicker.SelectedDate),
                 Priority = priority,
                 CategoryId = GetSelectedCategoryId(CategoryComboBox),
                 Status = TaskItemStatus.Todo,
@@ -379,16 +396,7 @@ namespace SoftwareEngineering.Client
         {
             if (TasksDataGrid.SelectedItem is TaskModel selected)
             {
-                var details = await taskService.GetDetailsAsync(selected.Id, CurrentUserId);
-                if (details.ShowIfFailed("Деталі недоступні"))
-                {
-                    return;
-                }
-
-                ShowTaskDetails(details.Value!);
-                await LoadSubtasksAsync();
-                await LoadCommentsAsync();
-                ShowPage("Details");
+                await OpenTaskDetailsAsync(selected.Id);
             }
             else
             {
@@ -1181,5 +1189,141 @@ namespace SoftwareEngineering.Client
             await LoadTasksAsync();
             await LoadReviewQueueAsync();
         }
+
+        // ---------- Створення завдання: вибір проєкту ----------
+
+        private async Task LoadProjectChoicesAsync()
+        {
+            var previousId = (ProjectComboBox.SelectedItem as ProjectModel)?.Id;
+
+            var result = await projectService.GetProjectsForNewTaskAsync(CurrentUserId);
+            if (result.ShowIfFailed("Не вдалося завантажити проєкти"))
+            {
+                return;
+            }
+
+            var projects = result.Value!;
+            ProjectComboBox.ItemsSource = projects;
+
+            // Пам'ятаємо останній вибраний проєкт, щоб не обирати його щоразу заново
+            ProjectComboBox.SelectedItem = projects.FirstOrDefault(project => project.Id == previousId) ?? projects.FirstOrDefault();
+
+            var hasProjects = projects.Count > 0;
+            ProjectComboBox.IsEnabled = hasProjects;
+            CreateTaskButton.IsEnabled = hasProjects;
+            NoProjectsHint.Visibility = hasProjects ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        // DatePicker повертає північ обраного дня; дедлайн «на сьогодні» тоді вже в минулому, тому беремо кінець дня
+        private static DateTime? EndOfDay(DateTime? date)
+        {
+            return date?.Date.AddDays(1).AddMinutes(-1);
+        }
+
+        private async Task OpenTaskDetailsAsync(Guid taskId)
+        {
+            var details = await taskService.GetDetailsAsync(taskId, CurrentUserId);
+            if (details.ShowIfFailed("Деталі недоступні"))
+            {
+                return;
+            }
+
+            ShowTaskDetails(details.Value!);
+            await LoadSubtasksAsync();
+            await LoadCommentsAsync();
+            ShowPage("Details");
+        }
+
+        // ---------- Календар ----------
+
+        private static readonly CultureInfo UkrainianCulture = CultureInfo.GetCultureInfo("uk-UA");
+
+        private DateTime calendarMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+        private DateTime calendarSelectedDay = DateTime.Today;
+
+        private void RenderCalendar()
+        {
+            var days = TaskCalendar.BuildMonth(allTasks, calendarMonth.Year, calendarMonth.Month, DateTime.Now);
+            CalendarDaysControl.ItemsSource = days;
+            CalendarMonthTitle.Text = Capitalize(calendarMonth.ToString("MMMM yyyy", UkrainianCulture));
+
+            // Обраний день лишається обраним, якщо він є в сітці; інакше — перше число місяця
+            var selected = days.FirstOrDefault(day => day.Date == calendarSelectedDay.Date)
+                ?? days.First(day => day.IsCurrentMonth);
+            ShowCalendarDay(selected);
+        }
+
+        private void ShowCalendarDay(CalendarDayModel day)
+        {
+            calendarSelectedDay = day.Date;
+            CalendarSelectedDayTitle.Text = Capitalize(day.Date.ToString("dddd, d MMMM", UkrainianCulture));
+
+            var now = DateTime.UtcNow;
+            CalendarDayTasksList.ItemsSource = day.Tasks
+                .Select(task => new CalendarTaskRow(
+                    task.Id,
+                    task.TaskCode,
+                    task.Title,
+                    task.Deadline!.Value.ToLocalTime().ToString("HH:mm"),
+                    StatusText(task.Status),
+                    task.Status != TaskItemStatus.Done && task.Deadline.Value.ToUniversalTime() < now))
+                .ToList();
+            CalendarNoTasksText.Visibility = day.Tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void CalendarDay_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not CalendarDayModel day)
+            {
+                return;
+            }
+
+            if (day.IsCurrentMonth)
+            {
+                ShowCalendarDay(day);
+                return;
+            }
+
+            // Клік по дню сусіднього місяця переходить на той місяць
+            calendarSelectedDay = day.Date;
+            calendarMonth = new DateTime(day.Date.Year, day.Date.Month, 1);
+            RenderCalendar();
+        }
+
+        private void CalendarPrevMonth_Click(object sender, RoutedEventArgs e)
+        {
+            calendarMonth = calendarMonth.AddMonths(-1);
+            RenderCalendar();
+        }
+
+        private void CalendarNextMonth_Click(object sender, RoutedEventArgs e)
+        {
+            calendarMonth = calendarMonth.AddMonths(1);
+            RenderCalendar();
+        }
+
+        private void CalendarToday_Click(object sender, RoutedEventArgs e)
+        {
+            calendarSelectedDay = DateTime.Today;
+            calendarMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            RenderCalendar();
+        }
+
+        private async void CalendarDayTasks_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (CalendarDayTasksList.SelectedItem is CalendarTaskRow row)
+            {
+                await OpenTaskDetailsAsync(row.Id);
+            }
+        }
+
+        private static string Capitalize(string text)
+        {
+            return string.IsNullOrEmpty(text) ? text : char.ToUpper(text[0], UkrainianCulture) + text[1..];
+        }
+
+        // Рядок списку завдань обраного дня: усе вже відформатовано для показу
+        private sealed record CalendarTaskRow(Guid Id, string Code, string Title, string Time, string Status, bool IsOverdue);
     }
 }
