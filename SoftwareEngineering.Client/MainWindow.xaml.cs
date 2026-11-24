@@ -127,20 +127,38 @@ namespace SoftwareEngineering.Client
             }
         }
 
-        // ---------- Історія вкладок: «назад» боковою кнопкою миші або Alt+← ----------
+        // ---------- Історія вкладок: «назад» / «вперед» бічними кнопками миші або Alt+← / Alt+→ ----------
+        //
+        // Правила, щоб не відкрити вкладку в недійсному стані:
+        // 1. Форми (редагування, прогрес, видалення) в історію не потрапляють: вони заповнені даними
+        //    на момент відкриття, і після збереження чи видалення повертатися в них не можна.
+        // 2. Деталі запам'ятовуються разом з id завдання і при поверненні завантажуються з БД заново.
+        //    Якщо завдання вже видалили, цей крок історії мовчки пропускається.
+        // 3. Решта вкладок і так перечитує дані, коли відкривається (або показує вже оновлений список).
 
         private const int MaxPageHistory = 50;
 
-        private readonly List<string> pageHistory = new();
+        private static readonly HashSet<string> FormPages = new() { "Edit", "UpdateProgress", "Delete" };
 
-        private string currentPage = "Overview";
+        private readonly List<PageEntry> backHistory = new();
+
+        private readonly List<PageEntry> forwardHistory = new();
+
+        private PageEntry currentEntry = new("Overview", null);
+
+        private bool isNavigatingHistory;
 
         private void Window_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            // XButton1 — бічна кнопка «назад» на мишці
+            // XButton1 — бічна кнопка «назад», XButton2 — «вперед»
             if (e.ChangedButton == System.Windows.Input.MouseButton.XButton1)
             {
-                GoBack();
+                NavigateHistory(backHistory, forwardHistory);
+                e.Handled = true;
+            }
+            else if (e.ChangedButton == System.Windows.Input.MouseButton.XButton2)
+            {
+                NavigateHistory(forwardHistory, backHistory);
                 e.Handled = true;
             }
         }
@@ -148,26 +166,80 @@ namespace SoftwareEngineering.Client
         private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
             // З Alt клавіша приходить як Key.System, а сама стрілка — у SystemKey
-            if (e.Key == System.Windows.Input.Key.System && e.SystemKey == System.Windows.Input.Key.Left)
-            {
-                GoBack();
-                e.Handled = true;
-            }
-        }
-
-        private void GoBack()
-        {
-            if (pageHistory.Count == 0)
+            if (e.Key != System.Windows.Input.Key.System)
             {
                 return;
             }
 
-            var previous = pageHistory[^1];
-            pageHistory.RemoveAt(pageHistory.Count - 1);
-            ShowPage(previous, rememberInHistory: false);
+            if (e.SystemKey == System.Windows.Input.Key.Left)
+            {
+                NavigateHistory(backHistory, forwardHistory);
+                e.Handled = true;
+            }
+            else if (e.SystemKey == System.Windows.Input.Key.Right)
+            {
+                NavigateHistory(forwardHistory, backHistory);
+                e.Handled = true;
+            }
         }
 
-        // Підсвічуємо в меню пункт відкритої вкладки (у деталей і форм редагування пункту немає — лишається попередній)
+        // from — звідки беремо крок (назад або вперед), to — куди кладемо поточну вкладку, щоб можна було повернутися
+        private async void NavigateHistory(List<PageEntry> from, List<PageEntry> to)
+        {
+            // Поки деталі вантажаться з БД, повторні натискання ігноруємо, щоб кроки не перемішались
+            if (isNavigatingHistory)
+            {
+                return;
+            }
+
+            isNavigatingHistory = true;
+            using var navigation = UiBusy.Scope(() => { }, () => isNavigatingHistory = false);
+
+            while (from.Count > 0)
+            {
+                var target = from[^1];
+                from.RemoveAt(from.Count - 1);
+
+                if (target.Page == "Details")
+                {
+                    if (target.TaskId is null)
+                    {
+                        continue;
+                    }
+
+                    var details = await taskService.GetDetailsAsync(target.TaskId.Value, CurrentUserId);
+                    if (details.IsFailure)
+                    {
+                        // Завдання видалили або доступ забрали — пропускаємо цей крок і пробуємо наступний
+                        continue;
+                    }
+
+                    ShowTaskDetails(details.Value!);
+                    await LoadSubtasksAsync();
+                    await LoadCommentsAsync();
+                }
+
+                Remember(to, currentEntry);
+                ShowPage(target.Page, rememberInHistory: false);
+                return;
+            }
+        }
+
+        private static void Remember(List<PageEntry> history, PageEntry entry)
+        {
+            if (FormPages.Contains(entry.Page))
+            {
+                return;
+            }
+
+            history.Add(entry);
+            if (history.Count > MaxPageHistory)
+            {
+                history.RemoveAt(0);
+            }
+        }
+
+        // Підсвічуємо в меню пункт відкритої вкладки (у деталей і форм пункту немає — лишається попередній)
         private void SyncNavigation(string page)
         {
             var button = FindNavButtons(this).FirstOrDefault(radio => radio.Tag as string == page);
@@ -193,19 +265,21 @@ namespace SoftwareEngineering.Client
             }
         }
 
+        // Крок історії: вкладка і, для деталей, яке саме завдання було відкрито
+        private sealed record PageEntry(string Page, Guid? TaskId);
+
         // async void: помилка завантаження сторінки дійде до глобального обробника в App, а не загубиться
         private async void ShowPage(string page, bool rememberInHistory = true)
         {
-            if (rememberInHistory && page != currentPage)
+            var entry = new PageEntry(page, page == "Details" ? detailsTaskId : null);
+            if (rememberInHistory && entry != currentEntry)
             {
-                pageHistory.Add(currentPage);
-                if (pageHistory.Count > MaxPageHistory)
-                {
-                    pageHistory.RemoveAt(0);
-                }
+                // Новий перехід, як у браузері, обнуляє «вперед»
+                Remember(backHistory, currentEntry);
+                forwardHistory.Clear();
             }
 
-            currentPage = page;
+            currentEntry = entry;
             SyncNavigation(page);
 
             foreach (FrameworkElement element in PagesHost.Children)
