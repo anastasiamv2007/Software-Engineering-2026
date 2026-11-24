@@ -56,7 +56,7 @@ public partial class ProjectsView : UserControl
         _selectedProject = null;
     }
 
-    private void LstProjects_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void LstProjects_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (LstProjects.SelectedItem is ProjectModel selected)
         {
@@ -79,9 +79,9 @@ public partial class ProjectsView : UserControl
             CoExecutorPanel.Visibility = ownerOnly;
             TxtCoExecutorEmail.Text = string.Empty;
             MembersPanel.Visibility = Visibility.Visible;
-            _ = LoadMembersAsync(selected.Id, isOwner);
 
             DetailsPanel.Visibility = Visibility.Visible;
+            await LoadMembersAsync(selected.Id, isOwner);
         }
     }
 
@@ -168,7 +168,7 @@ public partial class ProjectsView : UserControl
         var email = TxtCoExecutorEmail.Text.Trim();
         var currentUserId = _userSession.CurrentUser?.Id ?? Guid.Empty;
 
-        // Сервіс сам перевіряє email і права та не кидає винятків — помилка приходить у Result
+        // Сервіс сам перевіряє email і права — відмова приходить у Result
         var result = await _projectMemberService.AddCoExecutorAsync(_selectedProject.Id, email, currentUserId);
 
         if (result.ShowIfFailed("Співвиконавця не додано"))

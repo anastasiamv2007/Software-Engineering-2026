@@ -33,7 +33,8 @@ public partial class LoginWindow : Window {
     }
 
     private async void SubmitButton_Click(object sender, RoutedEventArgs e) {
-        SubmitButton.IsEnabled = false;
+        // Кнопка ввімкнеться в кінці методу, навіть якщо БД недоступна і вилетить виняток
+        using var busy = UiBusy.Disable(SubmitButton);
 
         var result = _isRegisterMode
             ? await _authService.RegisterAsync(new RegisterUserModel {
@@ -46,7 +47,6 @@ public partial class LoginWindow : Window {
                 Password = PasswordBox.Password
             });
 
-        SubmitButton.IsEnabled = true;
         if (result.ShowIfFailed(_isRegisterMode ? "Реєстрація не вдалася" : "Вхід не вдався")) {
             return;
         }

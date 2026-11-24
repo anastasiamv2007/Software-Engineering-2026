@@ -4,7 +4,6 @@ using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Entities;
 using SoftwareEngineering.DAL.Enums;
-using SoftwareEngineering.DAL.Exceptions;
 using SoftwareEngineering.DAL.Repositories;
 
 namespace SoftwareEngineering.Tests;
@@ -65,53 +64,24 @@ public class TaskCodeTests
         Assert.Equal("PL-3", code);
     }
 
-    // Код щойно зайняв інший користувач — береться наступний, і завдання все одно створюється
+    // Код рахує репозиторій під блокуванням проєкту, але правило «найбільший номер + 1» дає сервіс
     [Fact]
-    public async Task CreateAsync_CodeTakenConcurrently_RetriesWithNextCode()
+    public async Task CreateAsync_PassesNextTaskCodeRuleToRepository()
     {
         // Arrange
+        Func<IReadOnlyList<string>, string>? generator = null;
         this.taskRepositoryMock
-            .SetupSequence(repository => repository.GetTaskCodesAsync(It.IsAny<Guid>()))
-            .ReturnsAsync(new[] { "PL-1" })
-            .ReturnsAsync(new[] { "PL-1", "PL-2" });
-        this.taskRepositoryMock
-            .SetupSequence(repository => repository.AddAsync(It.IsAny<TaskItem>()))
-            .ThrowsAsync(new DuplicateTaskCodeException("PL-2", new InvalidOperationException()))
+            .Setup(repository => repository.AddAsync(It.IsAny<TaskItem>(), It.IsAny<Func<IReadOnlyList<string>, string>>()))
+            .Callback<TaskItem, Func<IReadOnlyList<string>, string>>((_, generateCode) => generator = generateCode)
             .Returns(Task.CompletedTask);
         var service = this.CreateService();
 
         // Act
-        var result = await service.CreateAsync(CreateValidModel());
+        await service.CreateAsync(CreateValidModel());
 
         // Assert
-        Assert.Equal("PL-3", result.Value!.TaskCode);
-        this.taskRepositoryMock.Verify(repository => repository.GetTaskCodesAsync(It.IsAny<Guid>()), Times.Exactly(2));
-    }
-
-    // Якщо конфлікт повторюється, копіювання не падає винятком, а повертає Result з помилкою
-    [Fact]
-    public async Task DuplicateAsync_CodeAlwaysTaken_ReturnsUnexpectedAfterLimitedAttempts()
-    {
-        // Arrange
-        var source = new TaskItem { Id = Guid.NewGuid(), ProjectId = Guid.NewGuid(), Title = "Оригінал", TaskCode = "PL-1" };
-        this.taskRepositoryMock.Setup(repository => repository.GetDetailsAsync(source.Id)).ReturnsAsync(source);
-        this.taskRepositoryMock
-            .Setup(repository => repository.GetTaskCodesAsync(source.ProjectId))
-            .ReturnsAsync(new[] { "PL-1" });
-        this.taskRepositoryMock
-            .Setup(repository => repository.AddAsync(It.IsAny<TaskItem>()))
-            .ThrowsAsync(new DuplicateTaskCodeException("PL-2", new InvalidOperationException()));
-        var service = this.CreateService();
-
-        // Act
-        var result = await service.DuplicateAsync(
-            source.Id,
-            new DuplicateTaskModel { Title = "Копія", Deadline = DateTime.Now.AddDays(1) },
-            Guid.NewGuid());
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-        this.taskRepositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Exactly(3));
+        Assert.NotNull(generator);
+        Assert.Equal("PL-8", generator!(new[] { "PL-1", "PL-7" }));
     }
 
     private static TaskModel CreateValidModel()

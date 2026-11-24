@@ -19,155 +19,137 @@ public class ProjectService : BaseService, IProjectService
         this.projectRepository = projectRepository;
     }
 
-    public Task<Result<IReadOnlyList<ProjectModel>>> GetUserProjectsAsync(Guid userId)
+    public async Task<Result<IReadOnlyList<ProjectModel>>> GetUserProjectsAsync(Guid userId)
     {
-        return this.ExecuteAsync("Отримання проєктів користувача", async () =>
+        if (userId == Guid.Empty)
         {
-            if (userId == Guid.Empty)
-            {
-                return Result.Fail<IReadOnlyList<ProjectModel>>(ErrorType.Validation, "Ідентифікатор користувача не вказано.");
-            }
+            return this.Fail<IReadOnlyList<ProjectModel>>(ErrorType.Validation, "Ідентифікатор користувача не вказано.");
+        }
 
-            var projects = await this.projectRepository.GetAllByUserIdAsync(userId);
-            IReadOnlyList<ProjectModel> models = projects.Select(ToModel).ToList();
-            return Result.Ok(models);
-        });
+        var projects = await this.projectRepository.GetAllByUserIdAsync(userId);
+        IReadOnlyList<ProjectModel> models = projects.Select(ToModel).ToList();
+        return Result.Ok(models);
     }
 
-    public Task<Result<ProjectModel>> GetByIdAsync(Guid id)
+    public async Task<Result<ProjectModel>> GetByIdAsync(Guid id)
     {
-        return this.ExecuteAsync("Отримання проєкту за ID", async () =>
-        {
-            var project = await this.projectRepository.GetByIdAsync(id);
-            return project is null
-                ? Result.Fail<ProjectModel>(ErrorType.NotFound, "Проєкт не знайдено.")
-                : Result.Ok(ToModel(project));
-        });
+        var project = await this.projectRepository.GetByIdAsync(id);
+        return project is null
+            ? this.Fail<ProjectModel>(ErrorType.NotFound, "Проєкт не знайдено.")
+            : Result.Ok(ToModel(project));
     }
 
-    public Task<Result<ProjectModel>> CreateProjectAsync(CreateProjectModel model, Guid currentUserId)
+    public async Task<Result<ProjectModel>> CreateProjectAsync(CreateProjectModel model, Guid currentUserId)
     {
-        return this.ExecuteAsync("Створення проєкту", async () =>
+        if (model is null)
         {
-            if (model is null)
-            {
-                return Result.Fail<ProjectModel>(ErrorType.Validation, "Дані проєкту не передано.");
-            }
+            return this.Fail<ProjectModel>(ErrorType.Validation, "Дані проєкту не передано.");
+        }
 
-            var nameError = ValidateName(model.Name);
-            if (nameError is not null)
-            {
-                return Result.Fail<ProjectModel>(ErrorType.Validation, nameError);
-            }
+        var nameError = ValidateName(model.Name);
+        if (nameError is not null)
+        {
+            return this.Fail<ProjectModel>(ErrorType.Validation, nameError);
+        }
 
-            var trimmedName = model.Name.Trim();
-            var ownerId = model.OwnerId ?? currentUserId;
-            if (ownerId == Guid.Empty)
-            {
-                return Result.Fail<ProjectModel>(ErrorType.Validation, "Не вказано власника проєкту.");
-            }
+        var trimmedName = model.Name.Trim();
+        var ownerId = model.OwnerId ?? currentUserId;
+        if (ownerId == Guid.Empty)
+        {
+            return this.Fail<ProjectModel>(ErrorType.Validation, "Не вказано власника проєкту.");
+        }
 
-            var existing = await this.projectRepository.FindByNameAsync(trimmedName);
-            if (existing is not null)
-            {
-                return Result.Fail<ProjectModel>(ErrorType.Duplicate, "Проєкт з такою назвою вже існує.");
-            }
+        var existing = await this.projectRepository.FindByNameAsync(trimmedName);
+        if (existing is not null)
+        {
+            return this.Fail<ProjectModel>(ErrorType.Duplicate, "Проєкт з такою назвою вже існує.");
+        }
 
-            var project = await this.AddProjectAsync(trimmedName, ownerId);
-            return Result.Ok(ToModel(project));
-        });
+        var project = await this.AddProjectAsync(trimmedName, ownerId);
+        return Result.Ok(ToModel(project));
     }
 
-    public Task<Result> UpdateProjectAsync(UpdateProjectModel model, Guid currentUserId)
+    public async Task<Result> UpdateProjectAsync(UpdateProjectModel model, Guid currentUserId)
     {
-        return this.ExecuteAsync("Оновлення проєкту", async () =>
+        if (model is null)
         {
-            if (model is null)
-            {
-                return Result.Fail(ErrorType.Validation, "Дані проєкту не передано.");
-            }
+            return this.Fail(ErrorType.Validation, "Дані проєкту не передано.");
+        }
 
-            var nameError = ValidateName(model.Name);
-            if (nameError is not null)
-            {
-                return Result.Fail(ErrorType.Validation, nameError);
-            }
+        var nameError = ValidateName(model.Name);
+        if (nameError is not null)
+        {
+            return this.Fail(ErrorType.Validation, nameError);
+        }
 
-            var project = await this.projectRepository.GetByIdAsync(model.Id);
-            if (project is null)
-            {
-                return Result.Fail(ErrorType.NotFound, "Проєкт не знайдено.");
-            }
+        var project = await this.projectRepository.GetByIdAsync(model.Id);
+        if (project is null)
+        {
+            return this.Fail(ErrorType.NotFound, "Проєкт не знайдено.");
+        }
 
-            if (project.OwnerId != currentUserId)
-            {
-                return Result.Fail(ErrorType.Forbidden, "Редагувати проєкт може лише його власник.");
-            }
+        if (project.OwnerId != currentUserId)
+        {
+            return this.Fail(ErrorType.Forbidden, "Редагувати проєкт може лише його власник.");
+        }
 
-            var trimmedName = model.Name.Trim();
+        var trimmedName = model.Name.Trim();
 
-            // Інший проєкт з такою назвою — дубль (свою ж назву можна лишити без змін)
-            var sameName = await this.projectRepository.FindByNameAsync(trimmedName);
-            if (sameName is not null && sameName.Id != project.Id)
-            {
-                return Result.Fail(ErrorType.Duplicate, "Проєкт з такою назвою вже існує.");
-            }
+        // Інший проєкт з такою назвою — дубль (свою ж назву можна лишити без змін)
+        var sameName = await this.projectRepository.FindByNameAsync(trimmedName);
+        if (sameName is not null && sameName.Id != project.Id)
+        {
+            return this.Fail(ErrorType.Duplicate, "Проєкт з такою назвою вже існує.");
+        }
 
-            project.Name = trimmedName;
-            await this.projectRepository.UpdateAsync(project);
+        project.Name = trimmedName;
+        await this.projectRepository.UpdateAsync(project);
 
-            this.Logger.Information("Оновлено проєкт {ProjectId}: нова назва {ProjectName}", model.Id, trimmedName);
-            return Result.Ok();
-        });
+        this.Logger.Information("Оновлено проєкт {ProjectId}: нова назва {ProjectName}", model.Id, trimmedName);
+        return Result.Ok();
     }
 
-    public Task<Result> DeleteProjectAsync(Guid id, Guid currentUserId)
+    public async Task<Result> DeleteProjectAsync(Guid id, Guid currentUserId)
     {
-        return this.ExecuteAsync("Видалення проєкту", async () =>
+        var project = await this.projectRepository.GetByIdAsync(id);
+        if (project is null)
         {
-            var project = await this.projectRepository.GetByIdAsync(id);
-            if (project is null)
-            {
-                return Result.Fail(ErrorType.NotFound, "Проєкт не знайдено.");
-            }
+            return this.Fail(ErrorType.NotFound, "Проєкт не знайдено.");
+        }
 
-            // Видалення каскадно прибирає всі завдання проєкту, тому дозволено лише власнику
-            if (project.OwnerId != currentUserId)
-            {
-                return Result.Fail(ErrorType.Forbidden, "Видалити проєкт може лише його власник.");
-            }
+        // Видалення каскадно прибирає всі завдання проєкту, тому дозволено лише власнику
+        if (project.OwnerId != currentUserId)
+        {
+            return this.Fail(ErrorType.Forbidden, "Видалити проєкт може лише його власник.");
+        }
 
-            await this.projectRepository.DeleteAsync(id);
-            this.Logger.Information("Користувач {UserId} видалив проєкт {ProjectId}", currentUserId, id);
-            return Result.Ok();
-        });
+        await this.projectRepository.DeleteAsync(id);
+        this.Logger.Information("Користувач {UserId} видалив проєкт {ProjectId}", currentUserId, id);
+        return Result.Ok();
     }
 
-    public Task<Result<ProjectModel>> GetOrCreateByNameAsync(string name, Guid ownerId)
+    public async Task<Result<ProjectModel>> GetOrCreateByNameAsync(string name, Guid ownerId)
     {
-        return this.ExecuteAsync("Отримання або створення проєкту", async () =>
+        var nameError = ValidateName(name);
+        if (nameError is not null)
         {
-            var nameError = ValidateName(name);
-            if (nameError is not null)
-            {
-                return Result.Fail<ProjectModel>(ErrorType.Validation, nameError);
-            }
+            return this.Fail<ProjectModel>(ErrorType.Validation, nameError);
+        }
 
-            if (ownerId == Guid.Empty)
-            {
-                return Result.Fail<ProjectModel>(ErrorType.Validation, "Не вказано власника проєкту.");
-            }
+        if (ownerId == Guid.Empty)
+        {
+            return this.Fail<ProjectModel>(ErrorType.Validation, "Не вказано власника проєкту.");
+        }
 
-            var trimmedName = name.Trim();
-            var existing = await this.projectRepository.FindByNameAsync(trimmedName);
-            if (existing is not null)
-            {
-                return Result.Ok(ToModel(existing));
-            }
+        var trimmedName = name.Trim();
+        var existing = await this.projectRepository.FindByNameAsync(trimmedName);
+        if (existing is not null)
+        {
+            return Result.Ok(ToModel(existing));
+        }
 
-            var project = await this.AddProjectAsync(trimmedName, ownerId);
-            return Result.Ok(ToModel(project));
-        });
+        var project = await this.AddProjectAsync(trimmedName, ownerId);
+        return Result.Ok(ToModel(project));
     }
 
     private static string? ValidateName(string? name)

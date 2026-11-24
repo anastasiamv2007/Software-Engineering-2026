@@ -131,23 +131,6 @@ public class SubtaskServiceTests
     }
 
     [Fact]
-    public async Task AddAsync_RepositoryThrows_ReturnsUnexpectedInsteadOfException()
-    {
-        // Arrange
-        this.subtaskRepositoryMock
-            .Setup(repository => repository.AddAsync(It.IsAny<Subtask>()))
-            .ThrowsAsync(new InvalidOperationException("db down"));
-        var service = this.CreateService();
-
-        // Act
-        var result = await service.AddAsync(this.task.Id, "Звіт", this.userId);
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-        Assert.DoesNotContain("db down", result.Error.Message);
-    }
-
-    [Fact]
     public async Task SetCompletedAsync_CoExecutor_MarksSubtaskCompleted()
     {
         // Arrange

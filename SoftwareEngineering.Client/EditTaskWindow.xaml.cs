@@ -59,7 +59,7 @@ namespace SoftwareEngineering.Client
             }
             currentTask.Priority = priority;
 
-            // Успіх і відмову логує сервіс (BaseService.ExecuteAsync), тут лише показ
+            // Відмову логує сервіс (BaseService.Fail), тут лише показ
             var result = await taskService.UpdateAsync(currentTask, currentUserId);
             if (result.ShowIfFailed("Завдання не оновлено"))
             {

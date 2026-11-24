@@ -126,7 +126,8 @@ namespace SoftwareEngineering.Client
             }
         }
 
-        private void ShowPage(string page)
+        // async void: помилка завантаження сторінки дійде до глобального обробника в App, а не загубиться
+        private async void ShowPage(string page)
         {
             foreach (FrameworkElement element in PagesHost.Children)
             {
@@ -136,7 +137,7 @@ namespace SoftwareEngineering.Client
             // Список категорій оновлюємо щоразу, коли відкривається вкладка
             if (page == "Categories")
             {
-                _ = LoadCategoriesAsync();
+                await LoadCategoriesAsync();
             }
 
             if (page == "Projects")
@@ -146,7 +147,7 @@ namespace SoftwareEngineering.Client
 
             if (page == "Review")
             {
-                _ = LoadReviewQueueAsync();
+                await LoadReviewQueueAsync();
             }
         }
 
@@ -932,10 +933,8 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            // Сервіс не кидає винятків, тож кнопку можна просто ввімкнути після відповіді
-            SendCommentButton.IsEnabled = false;
+            using var busy = UiBusy.Disable(SendCommentButton);
             var result = await commentService.AddAsync(taskId, NewCommentTextBox.Text, CurrentUserId);
-            SendCommentButton.IsEnabled = true;
 
             if (result.ShowIfFailed("Коментар не надіслано"))
             {
@@ -1077,9 +1076,8 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            DetailsSubmitReviewButton.IsEnabled = false;
+            using var busy = UiBusy.Disable(DetailsSubmitReviewButton);
             var result = await reviewService.SubmitForReviewAsync(taskId, CurrentUserId);
-            DetailsSubmitReviewButton.IsEnabled = true;
 
             if (result.ShowIfFailed("Не вдалося відправити на перевірку"))
             {
@@ -1144,14 +1142,15 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            ReviewApproveButton.IsEnabled = false;
-            ReviewRequestRevisionButton.IsEnabled = false;
+            // Кнопки вимкнені лише на час запиту; після успіху черга оновиться і вимкне їх сама (нічого не вибрано)
+            Result result;
+            using (UiBusy.Disable(ReviewApproveButton, ReviewRequestRevisionButton))
+            {
+                result = await reviewService.ApproveAsync(selected.TaskId, CurrentUserId);
+            }
 
-            var result = await reviewService.ApproveAsync(selected.TaskId, CurrentUserId);
             if (result.ShowIfFailed("Не вдалося прийняти завдання"))
             {
-                ReviewApproveButton.IsEnabled = true;
-                ReviewRequestRevisionButton.IsEnabled = true;
                 return;
             }
 
@@ -1167,14 +1166,14 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            ReviewApproveButton.IsEnabled = false;
-            ReviewRequestRevisionButton.IsEnabled = false;
+            Result result;
+            using (UiBusy.Disable(ReviewApproveButton, ReviewRequestRevisionButton))
+            {
+                result = await reviewService.RequestRevisionAsync(selected.TaskId, ReviewCommentTextBox.Text, CurrentUserId);
+            }
 
-            var result = await reviewService.RequestRevisionAsync(selected.TaskId, ReviewCommentTextBox.Text, CurrentUserId);
             if (result.ShowIfFailed("Не вдалося повернути завдання на доопрацювання"))
             {
-                ReviewApproveButton.IsEnabled = true;
-                ReviewRequestRevisionButton.IsEnabled = true;
                 return;
             }
 

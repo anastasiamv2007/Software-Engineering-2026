@@ -39,13 +39,7 @@ public class TaskDuplicationTests
         this.source.Comments.Add(new Comment { Id = Guid.NewGuid(), TaskId = this.source.Id, Content = "Здано" });
 
         this.taskRepositoryMock.Setup(repository => repository.GetDetailsAsync(this.source.Id)).ReturnsAsync(this.source);
-        this.taskRepositoryMock
-            .Setup(repository => repository.GetTaskCodesAsync(this.source.ProjectId))
-            .ReturnsAsync(new[] { "PL-1", "PL-2", "PL-3", "PL-4" });
-        this.taskRepositoryMock
-            .Setup(repository => repository.AddAsync(It.IsAny<TaskItem>()))
-            .Callback<TaskItem>(task => this.savedCopy = task)
-            .Returns(Task.CompletedTask);
+        this.taskRepositoryMock.SetupAdd(new[] { "PL-1", "PL-2", "PL-3", "PL-4" }, task => this.savedCopy = task);
 
         // За замовчуванням користувач — співвиконавець проєкту
         this.SetRole(ProjectRole.CoExecutor);
@@ -167,7 +161,7 @@ public class TaskDuplicationTests
 
         // Assert
         Assert.Equal(ErrorType.Validation, result.Error!.Type);
-        this.taskRepositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
+        this.taskRepositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>(), It.IsAny<Func<IReadOnlyList<string>, string>>()), Times.Never);
     }
 
     [Fact]
@@ -225,7 +219,7 @@ public class TaskDuplicationTests
 
         // Assert
         Assert.Equal(ErrorType.Forbidden, result.Error!.Type);
-        this.taskRepositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>()), Times.Never);
+        this.taskRepositoryMock.Verify(repository => repository.AddAsync(It.IsAny<TaskItem>(), It.IsAny<Func<IReadOnlyList<string>, string>>()), Times.Never);
     }
 
     [Fact]
@@ -240,24 +234,6 @@ public class TaskDuplicationTests
 
         // Assert
         Assert.Equal(ErrorType.Forbidden, result.Error!.Type);
-    }
-
-    // Помилка БД не вилітає винятком у UI, а повертається як Result без технічних деталей
-    [Fact]
-    public async Task DuplicateAsync_RepositoryThrows_ReturnsUnexpected()
-    {
-        // Arrange
-        this.taskRepositoryMock
-            .Setup(repository => repository.AddAsync(It.IsAny<TaskItem>()))
-            .ThrowsAsync(new InvalidOperationException("duplicate key value violates unique constraint"));
-        var service = this.CreateService();
-
-        // Act
-        var result = await service.DuplicateAsync(this.source.Id, CreateModel(), this.userId);
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-        Assert.DoesNotContain("unique constraint", result.Error.Message);
     }
 
     [Fact]

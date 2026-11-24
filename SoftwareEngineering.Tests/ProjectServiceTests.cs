@@ -110,25 +110,6 @@ public class ProjectServiceTests
         this.repositoryMock.Verify(repo => repo.AddAsync(It.IsAny<Project>()), Times.Never);
     }
 
-    // Помилка БД не вилітає винятком: BaseService.ExecuteAsync повертає Unexpected без технічних деталей
-    [Fact]
-    public async Task CreateProjectAsync_RepositoryThrows_ReturnsUnexpected()
-    {
-        // Arrange
-        var userId = Guid.NewGuid();
-        this.repositoryMock
-            .Setup(repo => repo.AddAsync(It.IsAny<Project>()))
-            .ThrowsAsync(new InvalidOperationException("connection refused"));
-        var service = this.CreateService();
-
-        // Act
-        var result = await service.CreateProjectAsync(CreateValidModel(userId), userId);
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-        Assert.DoesNotContain("connection refused", result.Error.Message);
-    }
-
     // ==========================================
     // 2. READ TESTS
     // ==========================================

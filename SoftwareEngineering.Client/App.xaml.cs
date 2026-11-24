@@ -181,9 +181,10 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Страховка для того, що проскочило повз Result (помилка в самому UI, баг):
-    /// пишемо в Seq і показуємо повідомлення замість аварійного закриття програми.
-    /// Звичайні помилки (валідація, права, недоступна БД) сюди не доходять — їх повертають сервіси.
+    /// Єдине місце, де ловляться непередбачені винятки (недоступна БД, баг у коді):
+    /// сервіси й репозиторії їх не перехоплюють, тож вони доходять сюди з async void обробників вікон.
+    /// Пишемо Error у Seq і показуємо повідомлення замість аварійного закриття програми.
+    /// Очікувані відмови (валідація, права, «не знайдено») сюди не доходять — їх повертають сервіси як Result.
     /// </summary>
     private void RegisterGlobalExceptionHandlers()
     {
@@ -194,7 +195,7 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             Log.Fatal(args.ExceptionObject as Exception, "Необроблена помилка у фоновому потоці, програма завершується");
 
-        // Задачі, результат яких ніхто не дочекався (наприклад, _ = LoadAsync())
+        // Задачі, результат яких ніхто не дочекався (у нашому коді таких немає, це страховка)
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {
             Log.Error(args.Exception, "Необроблена помилка у фоновій задачі");
@@ -204,7 +205,7 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        Log.Fatal(e.Exception, "Необроблена помилка в інтерфейсі: {ExceptionType}", e.Exception.GetType().Name);
+        Log.Error(e.Exception, "Необроблена помилка в інтерфейсі: {ExceptionType}", e.Exception.GetType().Name);
 
         MessageBox.Show(
             "Сталася непередбачена помилка. Дію не виконано, але програма продовжить роботу.\nДеталі записано в журнал.",

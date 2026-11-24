@@ -70,9 +70,8 @@ public partial class TransferOwnershipWindow : Window
             return;
         }
 
-        BtnConfirm.IsEnabled = false;
+        using var busy = UiBusy.Disable(BtnConfirm);
         var result = await _projectMemberService.TransferOwnershipAsync(_projectId, selectedMember.UserId, _currentUserId);
-        BtnConfirm.IsEnabled = true;
 
         if (result.ShowIfFailed("Власність не передано"))
         {

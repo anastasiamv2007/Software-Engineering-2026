@@ -98,23 +98,6 @@ public class ProjectMemberRemovalTests
     }
 
     [Fact]
-    public async Task RemoveMemberAsync_RepositoryFails_ReturnsUnexpectedWithoutThrowing()
-    {
-        // Arrange
-        this.SetupRole(this.ownerId, ProjectRole.Owner);
-        this.SetupRole(this.memberId, ProjectRole.CoExecutor);
-        this.projectRepositoryMock
-            .Setup(repository => repository.RemoveMemberAsync(this.projectId, this.memberId))
-            .ThrowsAsync(new InvalidOperationException());
-
-        // Act
-        var result = await this.CreateService().RemoveMemberAsync(this.projectId, this.memberId, this.ownerId);
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-    }
-
-    [Fact]
     public async Task GetMembersAsync_Participant_ReturnsMappedMembers()
     {
         // Arrange

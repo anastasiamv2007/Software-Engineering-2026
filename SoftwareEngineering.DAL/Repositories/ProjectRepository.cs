@@ -172,60 +172,55 @@ public class ProjectRepository : IProjectRepository
         }
     }
 
-    public async Task TransferOwnershipAsync(Guid projectId, Guid newOwnerId)
+    public async Task<bool> TransferOwnershipAsync(Guid projectId, Guid newOwnerId)
     {
         await using var context = await this.contextFactory.CreateDbContextAsync();
+
+        // Якщо щось упаде до CommitAsync, транзакція відкотиться сама при виході з методу
         await using var transaction = await context.Database.BeginTransactionAsync();
 
-        try
+        var project = await context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
+        if (project == null)
         {
-            var project = await context.Projects.FirstOrDefaultAsync(p => p.Id == projectId);
-            if (project == null)
-            {
-                throw new InvalidOperationException($"Проєкт з ID {projectId} не знайдено.");
-            }
-
-            var oldOwnerId = project.OwnerId;
-
-            // 1. Оновлюємо власника в таблиці projects
-            project.OwnerId = newOwnerId;
-
-            // 2. У project_members новий власник отримує роль Owner
-            var newOwnerMember = await context.ProjectMembers
-                .FirstOrDefaultAsync(m => m.ProjectId == projectId && m.UserId == newOwnerId);
-
-            if (newOwnerMember == null)
-            {
-                throw new InvalidOperationException("Новий власник не є учасником проєкту.");
-            }
-
-            newOwnerMember.Role = ProjectRole.Owner;
-
-            // 3. У project_members старий власник стає CoExecutor
-            var oldOwnerMember = await context.ProjectMembers
-                .FirstOrDefaultAsync(m => m.ProjectId == projectId && m.UserId == oldOwnerId);
-
-            if (oldOwnerMember != null)
-            {
-                oldOwnerMember.Role = ProjectRole.CoExecutor;
-            }
-            else
-            {
-                context.ProjectMembers.Add(new ProjectMember
-                {
-                    ProjectId = projectId,
-                    UserId = oldOwnerId,
-                    Role = ProjectRole.CoExecutor
-                });
-            }
-
-            await context.SaveChangesAsync();
-            await transaction.CommitAsync();
+            return false;
         }
-        catch
+
+        var oldOwnerId = project.OwnerId;
+
+        // 1. Оновлюємо власника в таблиці projects
+        project.OwnerId = newOwnerId;
+
+        // 2. У project_members новий власник отримує роль Owner
+        var newOwnerMember = await context.ProjectMembers
+            .FirstOrDefaultAsync(m => m.ProjectId == projectId && m.UserId == newOwnerId);
+
+        if (newOwnerMember == null)
         {
-            await transaction.RollbackAsync();
-            throw;
+            return false;
         }
+
+        newOwnerMember.Role = ProjectRole.Owner;
+
+        // 3. У project_members старий власник стає CoExecutor
+        var oldOwnerMember = await context.ProjectMembers
+            .FirstOrDefaultAsync(m => m.ProjectId == projectId && m.UserId == oldOwnerId);
+
+        if (oldOwnerMember != null)
+        {
+            oldOwnerMember.Role = ProjectRole.CoExecutor;
+        }
+        else
+        {
+            context.ProjectMembers.Add(new ProjectMember
+            {
+                ProjectId = projectId,
+                UserId = oldOwnerId,
+                Role = ProjectRole.CoExecutor
+            });
+        }
+
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return true;
     }
 }
