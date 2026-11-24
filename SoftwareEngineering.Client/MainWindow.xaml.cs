@@ -127,9 +127,87 @@ namespace SoftwareEngineering.Client
             }
         }
 
-        // async void: помилка завантаження сторінки дійде до глобального обробника в App, а не загубиться
-        private async void ShowPage(string page)
+        // ---------- Історія вкладок: «назад» боковою кнопкою миші або Alt+← ----------
+
+        private const int MaxPageHistory = 50;
+
+        private readonly List<string> pageHistory = new();
+
+        private string currentPage = "Overview";
+
+        private void Window_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
+            // XButton1 — бічна кнопка «назад» на мишці
+            if (e.ChangedButton == System.Windows.Input.MouseButton.XButton1)
+            {
+                GoBack();
+                e.Handled = true;
+            }
+        }
+
+        private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            // З Alt клавіша приходить як Key.System, а сама стрілка — у SystemKey
+            if (e.Key == System.Windows.Input.Key.System && e.SystemKey == System.Windows.Input.Key.Left)
+            {
+                GoBack();
+                e.Handled = true;
+            }
+        }
+
+        private void GoBack()
+        {
+            if (pageHistory.Count == 0)
+            {
+                return;
+            }
+
+            var previous = pageHistory[^1];
+            pageHistory.RemoveAt(pageHistory.Count - 1);
+            ShowPage(previous, rememberInHistory: false);
+        }
+
+        // Підсвічуємо в меню пункт відкритої вкладки (у деталей і форм редагування пункту немає — лишається попередній)
+        private void SyncNavigation(string page)
+        {
+            var button = FindNavButtons(this).FirstOrDefault(radio => radio.Tag as string == page);
+            if (button != null)
+            {
+                button.IsChecked = true;
+            }
+        }
+
+        private static IEnumerable<RadioButton> FindNavButtons(DependencyObject parent)
+        {
+            foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
+            {
+                if (child is RadioButton { GroupName: "Nav" } radio)
+                {
+                    yield return radio;
+                }
+
+                foreach (var nested in FindNavButtons(child))
+                {
+                    yield return nested;
+                }
+            }
+        }
+
+        // async void: помилка завантаження сторінки дійде до глобального обробника в App, а не загубиться
+        private async void ShowPage(string page, bool rememberInHistory = true)
+        {
+            if (rememberInHistory && page != currentPage)
+            {
+                pageHistory.Add(currentPage);
+                if (pageHistory.Count > MaxPageHistory)
+                {
+                    pageHistory.RemoveAt(0);
+                }
+            }
+
+            currentPage = page;
+            SyncNavigation(page);
+
             foreach (FrameworkElement element in PagesHost.Children)
             {
                 element.Visibility = element.Name == $"Page_{page}" ? Visibility.Visible : Visibility.Collapsed;
@@ -1244,14 +1322,16 @@ namespace SoftwareEngineering.Client
 
         private void RenderCalendar()
         {
-            var days = TaskCalendar.BuildMonth(allTasks, calendarMonth.Year, calendarMonth.Month, DateTime.Now);
+            // Обраний день лишається обраним, якщо він у цьому місяці; інакше — перше число
+            if (calendarSelectedDay.Year != calendarMonth.Year || calendarSelectedDay.Month != calendarMonth.Month)
+            {
+                calendarSelectedDay = calendarMonth;
+            }
+
+            var days = TaskCalendar.BuildMonth(allTasks, calendarMonth.Year, calendarMonth.Month, DateTime.Now, calendarSelectedDay);
             CalendarDaysControl.ItemsSource = days;
             CalendarMonthTitle.Text = Capitalize(calendarMonth.ToString("MMMM yyyy", UkrainianCulture));
-
-            // Обраний день лишається обраним, якщо він є в сітці; інакше — перше число місяця
-            var selected = days.FirstOrDefault(day => day.Date == calendarSelectedDay.Date)
-                ?? days.First(day => day.IsCurrentMonth);
-            ShowCalendarDay(selected);
+            ShowCalendarDay(days.Single(day => day.IsSelected));
         }
 
         private void ShowCalendarDay(CalendarDayModel day)
@@ -1279,13 +1359,7 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            if (day.IsCurrentMonth)
-            {
-                ShowCalendarDay(day);
-                return;
-            }
-
-            // Клік по дню сусіднього місяця переходить на той місяць
+            // Перебудовуємо сітку, щоб підсвітити обраний день; клік по дню сусіднього місяця переходить на той місяць
             calendarSelectedDay = day.Date;
             calendarMonth = new DateTime(day.Date.Year, day.Date.Month, 1);
             RenderCalendar();

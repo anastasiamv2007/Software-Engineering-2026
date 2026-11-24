@@ -33,6 +33,30 @@ public class TaskCalendarTests
         Assert.Equal(new DateTime(2026, 11, 24), Assert.Single(days, day => day.IsToday).Date);
     }
 
+    // Обраний день позначається окремо від «сьогодні», щоб вікно підсвітило обидва
+    [Fact]
+    public void BuildMonth_MarksSelectedDaySeparatelyFromToday()
+    {
+        // Act
+        var days = TaskCalendar.BuildMonth(Array.Empty<TaskModel>(), 2026, 11, Now, selectedDate: new DateTime(2026, 11, 5, 15, 30, 0));
+
+        // Assert
+        var selected = Assert.Single(days, day => day.IsSelected);
+        Assert.Equal(new DateTime(2026, 11, 5), selected.Date);
+        Assert.False(selected.IsToday);
+        Assert.False(days.Single(day => day.IsToday).IsSelected);
+    }
+
+    [Fact]
+    public void BuildMonth_WithoutSelectedDate_SelectsNothing()
+    {
+        // Act
+        var days = TaskCalendar.BuildMonth(Array.Empty<TaskModel>(), 2026, 11, Now);
+
+        // Assert
+        Assert.DoesNotContain(days, day => day.IsSelected);
+    }
+
     [Fact]
     public void BuildMonth_PutsTaskOnLocalDeadlineDate_SortedByTime()
     {

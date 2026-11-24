@@ -17,6 +17,11 @@ public class CalendarDayModel
     public bool IsToday { get; init; }
 
     /// <summary>
+    /// День, на який користувач клацнув (його завдання показано праворуч).
+    /// </summary>
+    public bool IsSelected { get; init; }
+
+    /// <summary>
     /// Усі завдання з дедлайном у цей день, за часом дедлайну.
     /// </summary>
     public IReadOnlyList<TaskModel> Tasks { get; init; } = Array.Empty<TaskModel>();

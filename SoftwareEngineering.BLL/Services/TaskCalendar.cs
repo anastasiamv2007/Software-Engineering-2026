@@ -16,12 +16,14 @@ public static class TaskCalendar
     /// <summary>
     /// Сітка місяця з понеділка: дні попереднього місяця, увесь місяць, дні наступного — разом 42 клітинки.
     /// Дедлайн порівнюється за локальною датою, як і у фільтрі за періодом.
+    /// selectedDate позначає обраний день (IsSelected), щоб вікно могло його підсвітити.
     /// </summary>
     public static IReadOnlyList<CalendarDayModel> BuildMonth(
         IEnumerable<TaskModel> tasks,
         int year,
         int month,
         DateTime now,
+        DateTime? selectedDate = null,
         int previewSize = DefaultPreviewSize)
     {
         var firstDay = new DateTime(year, month, 1);
@@ -54,6 +56,7 @@ public static class TaskCalendar
                 Date = date,
                 IsCurrentMonth = date.Month == month,
                 IsToday = date == today,
+                IsSelected = selectedDate.HasValue && date == selectedDate.Value.Date,
                 Tasks = dayTasks,
                 PreviewTasks = dayTasks.Take(Math.Max(previewSize, 0)).ToList(),
                 HasOverdue = dayTasks.Any(task => IsOverdue(task, nowUtc)),

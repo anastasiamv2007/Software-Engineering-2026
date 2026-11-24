@@ -5,7 +5,8 @@
         xmlns:local="clr-namespace:SoftwareEngineering.Client"
         xmlns:models="clr-namespace:SoftwareEngineering.BLL.Models;assembly=SoftwareEngineering.BLL"
         Title="PLANORA" Height="800" Width="1280" MinWidth="1000" MinHeight="700"
-        WindowStartupLocation="CenterScreen" Background="#F8FAFC">
+        WindowStartupLocation="CenterScreen" Background="#F8FAFC"
+        PreviewMouseDown="Window_PreviewMouseDown" PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
@@ -822,6 +823,13 @@
                                             <DataTrigger Binding="{Binding IsCurrentMonth}" Value="False">
                                                 <Setter TargetName="Cell" Property="Background" Value="#F8FAFC"/>
                                                 <Setter TargetName="Cell" Property="Opacity" Value="0.5"/>
+                                            </DataTrigger>
+                                            <Trigger SourceName="Cell" Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Cell" Property="Background" Value="#F1F5F9"/>
+                                            </Trigger>
+                                            <!-- Обраний день — світло-блакитний фон; рамка «сьогодні» лишається окремо -->
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter TargetName="Cell" Property="Background" Value="#DBEAFE"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsToday}" Value="True">
                                                 <Setter TargetName="Cell" Property="BorderBrush" Value="#2563EB"/>
