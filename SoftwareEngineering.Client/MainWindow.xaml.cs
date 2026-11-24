@@ -1,11 +1,14 @@
-﻿using SoftwareEngineering.BLL.Interfaces;
+﻿using Serilog;
+using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Enums;
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 
 
@@ -598,7 +601,7 @@ namespace SoftwareEngineering.Client
                 DetailsBadges.Children.Add(CreateBadge(details.CategoryName, details.CategoryColorHex ?? "#E2E8F0", "#FFFFFF"));
             }
 
-            DetailsDescriptionText.Text = string.IsNullOrWhiteSpace(task.Description) ? "Немає опису" : task.Description;
+            ShowDescription(task.Description);
 
 
             DetailsMembersList.ItemsSource = details.Members
@@ -1473,5 +1476,86 @@ namespace SoftwareEngineering.Client
 
         // Рядок списку завдань обраного дня: усе вже відформатовано для показу
         private sealed record CalendarTaskRow(Guid Id, string Code, string Title, string Time, string Status, bool IsOverdue);
+
+        // ---------- Опис завдання: виділення, копіювання, клікабельні посилання ----------
+
+        private string? shownDescription;
+
+        private void ShowDescription(string? description)
+        {
+            shownDescription = string.IsNullOrWhiteSpace(description) ? null : description;
+            CopyDescriptionButton.IsEnabled = shownDescription != null;
+            CopyDescriptionButton.Content = "Копіювати";
+
+            var paragraph = new Paragraph { Margin = new Thickness(0) };
+            if (shownDescription == null)
+            {
+                paragraph.Inlines.Add(new Run("Немає опису") { Foreground = Brushes.Gray, FontStyle = FontStyles.Italic });
+            }
+            else
+            {
+                foreach (var segment in TextLinks.Split(shownDescription))
+                {
+                    if (segment.Link == null)
+                    {
+                        AddTextWithLineBreaks(paragraph.Inlines, segment.Text);
+                        continue;
+                    }
+
+                    var link = new Hyperlink(new Run(segment.Text))
+                    {
+                        NavigateUri = segment.Link,
+                        ToolTip = segment.Link.AbsoluteUri,
+                        Cursor = System.Windows.Input.Cursors.Hand,
+                    };
+                    link.RequestNavigate += OpenLinkInBrowser;
+                    paragraph.Inlines.Add(link);
+                }
+            }
+
+            DetailsDescriptionBox.Document = new FlowDocument(paragraph) { PagePadding = new Thickness(0) };
+        }
+
+        // Переноси рядків з опису зберігаємо явними LineBreak, щоб абзаци виглядали так, як їх ввели
+        private static void AddTextWithLineBreaks(InlineCollection inlines, string text)
+        {
+            var lines = text.Replace("\r\n", "\n").Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (i > 0)
+                {
+                    inlines.Add(new LineBreak());
+                }
+
+                if (lines[i].Length > 0)
+                {
+                    inlines.Add(new Run(lines[i]));
+                }
+            }
+        }
+
+        // Те саме, що webbrowser.open у Python: оболонка Windows відкриває адресу в браузері за замовчуванням.
+        // TextLinks пропускає лише http(s), тож сюди не потрапить file:// чи інша схема, яка запустила б програму.
+        private void OpenLinkInBrowser(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+            Log.Information("Відкрито посилання з опису завдання {TaskId}: {Host}", detailsTaskId, e.Uri.Host);
+            e.Handled = true;
+        }
+
+        private async void CopyDescription_Click(object sender, RoutedEventArgs e)
+        {
+            if (shownDescription == null)
+            {
+                return;
+            }
+
+            Clipboard.SetText(shownDescription);
+
+            // Коротке підтвердження на самій кнопці замість вікна з повідомленням
+            CopyDescriptionButton.Content = "Скопійовано ✓";
+            await Task.Delay(TimeSpan.FromSeconds(1.5));
+            CopyDescriptionButton.Content = "Копіювати";
+        }
     }
 }

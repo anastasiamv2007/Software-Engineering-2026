@@ -410,9 +410,16 @@
                         <StackPanel Grid.Column="0">
                             <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                                 <StackPanel>
-                                    <TextBlock Text="Опис" Style="{StaticResource FieldLabel}"/>
-                                    <Border Background="#F1F5F9" CornerRadius="8" Padding="12">
-                                        <TextBlock x:Name="DetailsDescriptionText" TextWrapping="Wrap" FontSize="14" Foreground="#334155"/>
+                                    <DockPanel Margin="0,0,0,4">
+                                        <Button x:Name="CopyDescriptionButton" DockPanel.Dock="Right" Content="Копіювати" Style="{StaticResource SecondaryButton}"
+                                                Padding="10,3" FontSize="12" ToolTip="Скопіювати весь опис у буфер обміну" Click="CopyDescription_Click"/>
+                                        <TextBlock Text="Опис" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" Margin="0"/>
+                                    </DockPanel>
+                                    <Border Background="#F1F5F9" CornerRadius="8" Padding="8">
+                                        <!-- RichTextBox лише для читання: текст можна виділити й скопіювати (Ctrl+C), посилання клікабельні -->
+                                        <RichTextBox x:Name="DetailsDescriptionBox" IsReadOnly="True" IsDocumentEnabled="True"
+                                                     BorderThickness="0" Background="Transparent" FontSize="14" Foreground="#334155"
+                                                     VerticalScrollBarVisibility="Disabled" IsUndoEnabled="False"/>
                                     </Border>
                                 </StackPanel>
                             </Border>
