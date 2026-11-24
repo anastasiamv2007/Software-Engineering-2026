@@ -107,6 +107,90 @@ public class AuthService : BaseService, IAuthService
         });
     }
 
+    public Task<Result<UserModel>> UpdateProfileAsync(
+        Guid userId,
+        string fullName,
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        return this.ExecuteAsync("Оновлення профілю користувача", async () =>
+        {
+            if (string.IsNullOrWhiteSpace(fullName))
+            {
+                return Result.Fail<UserModel>(ErrorType.Validation, "Ім'я користувача не може бути порожнім.");
+            }
+
+            if (string.IsNullOrWhiteSpace(email) || !EmailRegex.IsMatch(email.Trim()))
+            {
+                return Result.Fail<UserModel>(ErrorType.Validation, "Введено некоректний формат електронної пошти.");
+            }
+
+            var user = await this.userRepository.GetByIdAsync(userId, cancellationToken);
+            if (user is null)
+            {
+                return Result.Fail<UserModel>(ErrorType.NotFound, "Користувача не знайдено.");
+            }
+
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+            var existingWithEmail = await this.userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
+            if (existingWithEmail is not null && existingWithEmail.Id != userId)
+            {
+                return Result.Fail<UserModel>(ErrorType.Duplicate, "Користувач із такою електронною поштою вже зареєстрований.");
+            }
+
+            user.FullName = fullName.Trim();
+            user.Email = normalizedEmail;
+
+            await this.userRepository.UpdateAsync(user, cancellationToken);
+            this.Logger.Information("Оновлено профіль користувача {UserId} ({Email})", user.Id, user.Email);
+
+            return Result.Ok(ToModel(user));
+        });
+    }
+
+    public Task<Result> ChangePasswordAsync(
+        Guid userId,
+        string oldPassword,
+        string newPassword,
+        CancellationToken cancellationToken = default)
+    {
+        return this.ExecuteAsync("Зміна пароля користувача", async () =>
+        {
+            if (string.IsNullOrWhiteSpace(oldPassword))
+            {
+                return Result.Fail(ErrorType.Validation, "Введіть поточний пароль.");
+            }
+
+            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < MinPasswordLength)
+            {
+                return Result.Fail(ErrorType.Validation, $"Новий пароль повинен містити щонайменше {MinPasswordLength} символів.");
+            }
+
+            if (oldPassword == newPassword)
+            {
+                return Result.Fail(ErrorType.Validation, "Новий пароль повинен відрізнятися від поточного.");
+            }
+
+            var user = await this.userRepository.GetByIdAsync(userId, cancellationToken);
+            if (user is null)
+            {
+                return Result.Fail(ErrorType.NotFound, "Користувача не знайдено.");
+            }
+
+            if (!PasswordHasher.Verify(oldPassword, user.PasswordHash))
+            {
+                this.Logger.Warning("Невдала спроба зміни пароля користувача {UserId}: невірний старий пароль", userId);
+                return Result.Fail(ErrorType.Validation, "Невірний поточний пароль.");
+            }
+
+            user.PasswordHash = PasswordHasher.Hash(newPassword);
+            await this.userRepository.UpdateAsync(user, cancellationToken);
+
+            this.Logger.Information("Змінено пароль користувача {UserId} ({Email})", user.Id, user.Email);
+            return Result.Ok();
+        });
+    }
+
     public Task<Result<RememberedSessionModel>> CreateRememberedSessionAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         return this.ExecuteAsync("Збереження входу", async () =>

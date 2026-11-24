@@ -20,4 +20,14 @@ public interface IAuthService
     /// Відновлює вхід без пароля; помилка, якщо користувача видалено або він змінив пароль.
     /// </summary>
     Task<Result<UserModel>> RestoreSessionAsync(RememberedSessionModel session, CancellationToken cancellationToken = default);
+   
+    /// <summary>
+    /// Оновлює ім'я та електронну пошту користувача.
+    /// </summary>
+    Task<Result<UserModel>> UpdateProfileAsync(Guid userId, string fullName, string email, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Змінює пароль користувача після перевірки поточного пароля.
+    /// </summary>
+    Task<Result> ChangePasswordAsync(Guid userId, string oldPassword, string newPassword, CancellationToken cancellationToken = default);
 }
