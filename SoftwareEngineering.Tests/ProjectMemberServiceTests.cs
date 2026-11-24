@@ -45,20 +45,6 @@ public class ProjectMemberServiceTests
     }
 
     [Fact]
-    public async Task AddCoExecutorAsync_WhenRepositoryThrows_ReturnsUnexpectedResult()
-    {
-        // Arrange
-        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
-            .ThrowsAsync(new InvalidOperationException("DB error"));
-
-        // Act
-        var result = await _service.AddCoExecutorAsync(Guid.NewGuid(), "user@planora.com", Guid.NewGuid());
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-    }
-
-    [Fact]
     public async Task AddCoExecutorAsync_WhenUserIsNotOwner_ReturnsForbiddenResult()
     {
         // Arrange
@@ -240,29 +226,6 @@ public class ProjectMemberServiceTests
     }
 
     [Fact]
-    public async Task TransferOwnershipAsync_WhenRepositoryThrows_ReturnsUnexpectedResult()
-    {
-        // Arrange
-        var projectId = Guid.NewGuid();
-        var currentUserId = Guid.NewGuid();
-        var newOwnerId = Guid.NewGuid();
-
-        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, currentUserId))
-            .ReturnsAsync(ProjectRole.Owner);
-        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, newOwnerId))
-            .ReturnsAsync(ProjectRole.CoExecutor);
-        _projectRepoMock.Setup(repo => repo.TransferOwnershipAsync(projectId, newOwnerId))
-            .ThrowsAsync(new InvalidOperationException("Transaction failed"));
-
-        // Act
-        var result = await _service.TransferOwnershipAsync(projectId, newOwnerId, currentUserId);
-
-        // Assert
-        Assert.False(result.IsSuccess);
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-    }
-
-    [Fact]
     public async Task TransferOwnershipAsync_WhenAllConditionsMet_TransfersOwnershipAndReturnsSuccess()
     {
         // Arrange
@@ -274,6 +237,8 @@ public class ProjectMemberServiceTests
             .ReturnsAsync(ProjectRole.Owner);
         _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, newOwnerId))
             .ReturnsAsync(ProjectRole.CoExecutor);
+        _projectRepoMock.Setup(repo => repo.TransferOwnershipAsync(projectId, newOwnerId))
+            .ReturnsAsync(true);
 
         // Act
         var result = await _service.TransferOwnershipAsync(projectId, newOwnerId, currentUserId);
@@ -281,6 +246,29 @@ public class ProjectMemberServiceTests
         // Assert
         Assert.True(result.IsSuccess);
         _projectRepoMock.Verify(repo => repo.TransferOwnershipAsync(projectId, newOwnerId), Times.Once);
+    }
+
+    // Учасника вилучили між перевіркою і транзакцією: репозиторій повертає false замість винятку
+    [Fact]
+    public async Task TransferOwnershipAsync_WhenRepositoryReportsMissingMember_ReturnsNotFound()
+    {
+        // Arrange
+        var projectId = Guid.NewGuid();
+        var currentUserId = Guid.NewGuid();
+        var newOwnerId = Guid.NewGuid();
+
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, currentUserId))
+            .ReturnsAsync(ProjectRole.Owner);
+        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(projectId, newOwnerId))
+            .ReturnsAsync(ProjectRole.CoExecutor);
+        _projectRepoMock.Setup(repo => repo.TransferOwnershipAsync(projectId, newOwnerId))
+            .ReturnsAsync(false);
+
+        // Act
+        var result = await _service.TransferOwnershipAsync(projectId, newOwnerId, currentUserId);
+
+        // Assert
+        Assert.Equal(ErrorType.NotFound, result.Error!.Type);
     }
 
     [Fact]
@@ -446,20 +434,5 @@ public class ProjectMemberServiceTests
         _projectRepoMock.Verify(
             repo => repo.UpdateMemberRoleAsync(projectId, memberId, ProjectRole.Reviewer),
             Times.Once);
-    }
-
-    [Fact]
-    public async Task ChangeRoleAsync_WhenRepositoryThrows_ReturnsUnexpectedResult()
-    {
-        // Arrange
-        _projectRepoMock.Setup(repo => repo.GetMemberRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
-            .ThrowsAsync(new InvalidOperationException("DB error"));
-
-        // Act
-        var result = await _service.ChangeRoleAsync(Guid.NewGuid(), Guid.NewGuid(), ProjectRole.Reviewer, Guid.NewGuid());
-
-        // Assert
-        Assert.False(result.IsSuccess);
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
     }
 }

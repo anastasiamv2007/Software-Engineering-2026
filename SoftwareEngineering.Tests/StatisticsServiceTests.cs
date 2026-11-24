@@ -115,21 +115,6 @@ public class StatisticsServiceTests
         Assert.Equal(ErrorType.Validation, result.Error!.Type);
     }
 
-    [Fact]
-    public async Task GetStatisticsAsync_RepositoryFails_ReturnsUnexpectedWithoutThrowing()
-    {
-        // Arrange
-        this.repositoryMock
-            .Setup(repository => repository.GetByUserAsync(this.userId))
-            .ThrowsAsync(new InvalidOperationException());
-
-        // Act
-        var result = await this.CreateService().GetStatisticsAsync(this.userId);
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-    }
-
     private static TaskItem NewTask(TaskItemStatus status, DateTime? deadline)
     {
         return new TaskItem { Id = Guid.NewGuid(), ProjectId = Guid.NewGuid(), Status = status, Deadline = deadline, Title = "T", TaskCode = "PL-1" };

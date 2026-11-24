@@ -16,5 +16,8 @@ public interface IProjectService : IService
 
     Task<Result> DeleteProjectAsync(Guid id, Guid currentUserId);
 
-    Task<Result<ProjectModel>> GetOrCreateByNameAsync(string name, Guid ownerId);
+    /// <summary>
+    /// Проєкти, у яких користувач може створювати завдання (власник або співвиконавець) — для списку на формі створення.
+    /// </summary>
+    Task<Result<IReadOnlyList<ProjectModel>>> GetProjectsForNewTaskAsync(Guid userId);
 }

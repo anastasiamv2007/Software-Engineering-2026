@@ -5,7 +5,7 @@ namespace SoftwareEngineering.Client;
 
 /// <summary>
 /// Показ помилок з Result у вікнах: замість try/catch у кожному обробнику — одна перевірка.
-/// Логувати тут не треба: відмову вже записав у Seq сервіс (BaseService.ExecuteAsync).
+/// Логувати тут не треба: відмову вже записав у Seq сервіс у момент, коли її повернув (BaseService.Fail).
 /// </summary>
 internal static class ResultMessages
 {

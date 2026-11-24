@@ -78,24 +78,6 @@ public class AuthServiceSessionTests
         Assert.Equal(ErrorType.Validation, result.Error!.Type);
     }
 
-    // База недоступна — не виняток у вікно входу, а Result з Unexpected
-    [Fact]
-    public async Task LoginAsync_DatabaseUnavailable_ReturnsUnexpected()
-    {
-        // Arrange
-        this.userRepositoryMock
-            .Setup(repository => repository.GetByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("connection refused"));
-        var service = this.CreateService();
-
-        // Act
-        var result = await service.LoginAsync(new LoginUserModel { Email = this.user.Email, Password = Password });
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-        Assert.DoesNotContain("connection refused", result.Error.Message);
-    }
-
     // ---------- Реєстрація ----------
 
     [Fact]

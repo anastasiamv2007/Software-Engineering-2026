@@ -132,23 +132,6 @@ public class CommentServiceTests
     }
 
     [Fact]
-    public async Task AddCommentAsync_RepositoryThrows_ReturnsUnexpectedWithoutTechnicalDetails()
-    {
-        // Arrange
-        this.commentRepositoryMock
-            .Setup(repository => repository.AddAsync(It.IsAny<Comment>()))
-            .ThrowsAsync(new InvalidOperationException("connection refused"));
-        var service = this.CreateService();
-
-        // Act
-        var result = await service.AddAsync(this.task.Id, "Текст", this.userId);
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error?.Type);
-        Assert.DoesNotContain("connection refused", result.Error!.Message);
-    }
-
-    [Fact]
     public async Task GetByTaskAsync_Member_ReturnsCommentsWithAuthorNameRoleAndDeleteRights()
     {
         // Arrange

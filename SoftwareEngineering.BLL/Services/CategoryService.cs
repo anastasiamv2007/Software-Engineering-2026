@@ -22,100 +22,88 @@ public class CategoryService : BaseService, ICategoryService
 
     public async Task<Result<IReadOnlyList<CategoryModel>>> GetAllAsync()
     {
-        return await this.ExecuteAsync("Отримання категорій", async () =>
-        {
-            var categories = await this.categoryRepository.GetAllAsync();
-            IReadOnlyList<CategoryModel> models = categories.Select(ToModel).ToList();
+        var categories = await this.categoryRepository.GetAllAsync();
+        IReadOnlyList<CategoryModel> models = categories.Select(ToModel).ToList();
 
-            return Result.Ok(models);
-        });
+        return Result.Ok(models);
     }
 
     public async Task<Result<CategoryModel>> CreateAsync(CreateCategoryModel model)
     {
-        return await this.ExecuteAsync("Створення категорії", async () =>
+        if (model is null)
         {
-            if (model is null)
-            {
-                return Result.Fail<CategoryModel>(ErrorType.Validation, "Дані категорії не передано.");
-            }
+            return this.Fail<CategoryModel>(ErrorType.Validation, "Дані категорії не передано.");
+        }
 
-            var validation = Validate(model.Name, model.ColorHex);
-            if (validation is not null)
-            {
-                return Result.Fail<CategoryModel>(ErrorType.Validation, validation);
-            }
+        var validation = Validate(model.Name, model.ColorHex);
+        if (validation is not null)
+        {
+            return this.Fail<CategoryModel>(ErrorType.Validation, validation);
+        }
 
-            var name = model.Name.Trim();
-            var existing = await this.categoryRepository.FindByNameAsync(name);
-            if (existing is not null)
-            {
-                return Result.Fail<CategoryModel>(ErrorType.Duplicate, "Категорія з такою назвою вже існує.");
-            }
+        var name = model.Name.Trim();
+        var existing = await this.categoryRepository.FindByNameAsync(name);
+        if (existing is not null)
+        {
+            return this.Fail<CategoryModel>(ErrorType.Duplicate, "Категорія з такою назвою вже існує.");
+        }
 
-            var category = new Category { Name = name, ColorHex = model.ColorHex.ToUpperInvariant() };
-            await this.categoryRepository.AddAsync(category);
+        var category = new Category { Name = name, ColorHex = model.ColorHex.ToUpperInvariant() };
+        await this.categoryRepository.AddAsync(category);
 
-            this.Logger.Information("Створено категорію {CategoryName} ({CategoryId}) з кольором {ColorHex}", category.Name, category.Id, category.ColorHex);
+        this.Logger.Information("Створено категорію {CategoryName} ({CategoryId}) з кольором {ColorHex}", category.Name, category.Id, category.ColorHex);
 
-            return Result.Ok(ToModel(category));
-        });
+        return Result.Ok(ToModel(category));
     }
 
     public async Task<Result<CategoryModel>> UpdateAsync(UpdateCategoryModel model)
     {
-        return await this.ExecuteAsync("Редагування категорії", async () =>
+        if (model is null)
         {
-            if (model is null)
-            {
-                return Result.Fail<CategoryModel>(ErrorType.Validation, "Дані категорії не передано.");
-            }
+            return this.Fail<CategoryModel>(ErrorType.Validation, "Дані категорії не передано.");
+        }
 
-            var validation = Validate(model.Name, model.ColorHex);
-            if (validation is not null)
-            {
-                return Result.Fail<CategoryModel>(ErrorType.Validation, validation);
-            }
+        var validation = Validate(model.Name, model.ColorHex);
+        if (validation is not null)
+        {
+            return this.Fail<CategoryModel>(ErrorType.Validation, validation);
+        }
 
-            var category = await this.categoryRepository.GetByIdAsync(model.Id);
-            if (category is null)
-            {
-                return Result.Fail<CategoryModel>(ErrorType.NotFound, "Категорію не знайдено.");
-            }
+        var category = await this.categoryRepository.GetByIdAsync(model.Id);
+        if (category is null)
+        {
+            return this.Fail<CategoryModel>(ErrorType.NotFound, "Категорію не знайдено.");
+        }
 
-            var name = model.Name.Trim();
-            var sameName = await this.categoryRepository.FindByNameAsync(name);
-            if (sameName is not null && sameName.Id != model.Id)
-            {
-                return Result.Fail<CategoryModel>(ErrorType.Duplicate, "Категорія з такою назвою вже існує.");
-            }
+        var name = model.Name.Trim();
+        var sameName = await this.categoryRepository.FindByNameAsync(name);
+        if (sameName is not null && sameName.Id != model.Id)
+        {
+            return this.Fail<CategoryModel>(ErrorType.Duplicate, "Категорія з такою назвою вже існує.");
+        }
 
-            category.Name = name;
-            category.ColorHex = model.ColorHex.ToUpperInvariant();
-            await this.categoryRepository.UpdateAsync(category);
+        category.Name = name;
+        category.ColorHex = model.ColorHex.ToUpperInvariant();
+        await this.categoryRepository.UpdateAsync(category);
 
-            this.Logger.Information("Оновлено категорію {CategoryId}: назва {CategoryName}, колір {ColorHex}", category.Id, category.Name, category.ColorHex);
+        this.Logger.Information("Оновлено категорію {CategoryId}: назва {CategoryName}, колір {ColorHex}", category.Id, category.Name, category.ColorHex);
 
-            return Result.Ok(ToModel(category));
-        });
+        return Result.Ok(ToModel(category));
     }
 
     public async Task<Result> DeleteAsync(int id)
     {
-        return await this.ExecuteAsync("Видалення категорії", async () =>
+        var category = await this.categoryRepository.GetByIdAsync(id);
+        if (category is null)
         {
-            var category = await this.categoryRepository.GetByIdAsync(id);
-            if (category is null)
-            {
-                return Result.Fail(ErrorType.NotFound, "Категорію не знайдено.");
-            }
+            return this.Fail(ErrorType.NotFound, "Категорію не знайдено.");
+        }
 
-            await this.categoryRepository.DeleteAsync(id);
+        await this.categoryRepository.DeleteAsync(id);
 
-            this.Logger.Information("Видалено категорію {CategoryId} ({CategoryName}); у пов'язаних завданнях категорію скинуто", id, category.Name);
+        this.Logger.Information("Видалено категорію {CategoryId} ({CategoryName}); у пов'язаних завданнях категорію скинуто", id, category.Name);
 
-            return Result.Ok();
-        });
+        return Result.Ok();
     }
 
     private static string? Validate(string? name, string? colorHex)

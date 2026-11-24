@@ -4,62 +4,55 @@ using SoftwareEngineering.BLL.Services;
 namespace SoftwareEngineering.Tests;
 
 /// <summary>
-/// ExecuteAsync — єдине місце, де сервіси перехоплюють винятки. Перевіряємо його контракт напряму.
+/// Контракт BaseService: очікувані відмови повертаються через Fail, а винятки сервіс не ховає —
+/// їх обробляє глобальний обробник у UI.
 /// </summary>
 public class BaseServiceTests
 {
     private readonly TestService service = new();
 
     [Fact]
-    public async Task ExecuteAsync_Success_ReturnsValueUnchanged()
+    public void Fail_ReturnsFailureWithSameTypeAndMessage()
     {
         // Act
-        var result = await this.service.Run(() => Task.FromResult(Result.Ok(42)));
+        var result = this.service.Reject(ErrorType.Forbidden, "Немає прав.");
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Equal(42, result.Value);
-    }
-
-    // Очікувана відмова (валідація, права) проходить як є, з тим самим типом і текстом
-    [Fact]
-    public async Task ExecuteAsync_ExpectedFailure_IsReturnedAsIs()
-    {
-        // Act
-        var result = await this.service.Run(() => Task.FromResult(Result.Fail<int>(ErrorType.Forbidden, "Немає прав.")));
-
-        // Assert
+        Assert.True(result.IsFailure);
         Assert.Equal(ErrorType.Forbidden, result.Error!.Type);
         Assert.Equal("Немає прав.", result.Error.Message);
     }
 
-    // Будь-який виняток усередині дії не вилітає назовні, а стає Unexpected без технічних деталей
     [Fact]
-    public async Task ExecuteAsync_ActionThrows_ReturnsUnexpectedWithoutDetails()
+    public void FailGeneric_ReturnsFailureWithoutValue()
     {
         // Act
-        var result = await this.service.Run<int>(() => throw new InvalidOperationException("Npgsql: connection refused"));
+        var result = this.service.Reject<int>(ErrorType.NotFound, "Не знайдено.");
 
         // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
-        Assert.DoesNotContain("Npgsql", result.Error.Message);
+        Assert.True(result.IsFailure);
+        Assert.Equal(ErrorType.NotFound, result.Error!.Type);
+        Assert.Equal(default, result.Value);
     }
 
-    // Те саме для дій без значення (Result без T)
+    // Загального try/catch у сервісах немає: збій доходить до глобального обробника в App, а не стає Result
     [Fact]
-    public async Task ExecuteAsync_NonGenericActionThrows_ReturnsUnexpected()
+    public async Task ServiceMethod_DoesNotSwallowExceptions()
     {
-        // Act
-        var result = await this.service.Run(() => Task.FromException<Result>(new TimeoutException()));
-
-        // Assert
-        Assert.Equal(ErrorType.Unexpected, result.Error!.Type);
+        // Act + Assert
+        await Assert.ThrowsAsync<TimeoutException>(() => this.service.RunAsync(() => throw new TimeoutException()));
     }
 
     private sealed class TestService : BaseService
     {
-        public Task<Result<T>> Run<T>(Func<Task<Result<T>>> action) => this.ExecuteAsync("Тестова дія", action);
+        public Result Reject(ErrorType type, string message) => this.Fail(type, message);
 
-        public Task<Result> Run(Func<Task<Result>> action) => this.ExecuteAsync("Тестова дія", action);
+        public Result<T> Reject<T>(ErrorType type, string message) => this.Fail<T>(type, message);
+
+        public async Task<Result> RunAsync(Func<Task> action)
+        {
+            await action();
+            return Result.Ok();
+        }
     }
 }

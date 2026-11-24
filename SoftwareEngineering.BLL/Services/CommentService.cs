@@ -22,111 +22,102 @@ public class CommentService : BaseService, ICommentService
         this.projectRepository = projectRepository;
     }
 
-    public Task<Result<IReadOnlyList<CommentModel>>> GetByTaskAsync(Guid taskId, Guid currentUserId)
+    public async Task<Result<IReadOnlyList<CommentModel>>> GetByTaskAsync(Guid taskId, Guid currentUserId)
     {
-        return this.ExecuteAsync("Отримання коментарів", async () =>
+        var access = await this.GetAccessAsync(taskId, currentUserId);
+        if (access.Error is { } error)
         {
-            var access = await this.GetAccessAsync(taskId, currentUserId);
-            if (access.Error is { } error)
-            {
-                return Result.Fail<IReadOnlyList<CommentModel>>(error.Type, error.Message);
-            }
+            return this.Fail<IReadOnlyList<CommentModel>>(error.Type, error.Message);
+        }
 
-            if (!access.CanParticipate)
-            {
-                return Result.Fail<IReadOnlyList<CommentModel>>(ErrorType.Forbidden, "Переглядати коментарі можуть лише учасники проєкту.");
-            }
+        if (!access.CanParticipate)
+        {
+            return this.Fail<IReadOnlyList<CommentModel>>(ErrorType.Forbidden, "Переглядати коментарі можуть лише учасники проєкту.");
+        }
 
-            var comments = await this.commentRepository.GetByTaskIdAsync(taskId);
+        var comments = await this.commentRepository.GetByTaskIdAsync(taskId);
 
-            // Роль кожного автора в проєкті — щоб показати «Ім'я (Роль)»; запит на автора, а не на коментар
-            var roles = new Dictionary<Guid, ProjectRole?>();
-            foreach (var authorId in comments.Select(comment => comment.AuthorId).Distinct())
-            {
-                roles[authorId] = await this.projectRepository.GetMemberRoleAsync(access.ProjectId, authorId);
-            }
+        // Роль кожного автора в проєкті — щоб показати «Ім'я (Роль)»; запит на автора, а не на коментар
+        var roles = new Dictionary<Guid, ProjectRole?>();
+        foreach (var authorId in comments.Select(comment => comment.AuthorId).Distinct())
+        {
+            roles[authorId] = await this.projectRepository.GetMemberRoleAsync(access.ProjectId, authorId);
+        }
 
-            IReadOnlyList<CommentModel> models = comments
-                .Select(comment => ToModel(comment, comment.Author?.FullName, roles[comment.AuthorId], currentUserId, access.IsProjectOwner))
-                .ToList();
+        IReadOnlyList<CommentModel> models = comments
+            .Select(comment => ToModel(comment, comment.Author?.FullName, roles[comment.AuthorId], currentUserId, access.IsProjectOwner))
+            .ToList();
 
-            return Result.Ok(models);
-        });
+        return Result.Ok(models);
     }
 
-    public Task<Result<CommentModel>> AddAsync(Guid taskId, string content, Guid currentUserId)
+    public async Task<Result<CommentModel>> AddAsync(Guid taskId, string content, Guid currentUserId)
     {
-        return this.ExecuteAsync("Додавання коментаря", async () =>
+        var trimmedContent = content?.Trim() ?? string.Empty;
+        if (trimmedContent.Length == 0)
         {
-            var trimmedContent = content?.Trim() ?? string.Empty;
-            if (trimmedContent.Length == 0)
-            {
-                return Result.Fail<CommentModel>(ErrorType.Validation, "Коментар не може бути порожнім.");
-            }
+            return this.Fail<CommentModel>(ErrorType.Validation, "Коментар не може бути порожнім.");
+        }
 
-            if (trimmedContent.Length > MaxContentLength)
-            {
-                return Result.Fail<CommentModel>(ErrorType.Validation, $"Коментар не може перевищувати {MaxContentLength} символів.");
-            }
+        if (trimmedContent.Length > MaxContentLength)
+        {
+            return this.Fail<CommentModel>(ErrorType.Validation, $"Коментар не може перевищувати {MaxContentLength} символів.");
+        }
 
-            var access = await this.GetAccessAsync(taskId, currentUserId);
-            if (access.Error is { } error)
-            {
-                return Result.Fail<CommentModel>(error.Type, error.Message);
-            }
+        var access = await this.GetAccessAsync(taskId, currentUserId);
+        if (access.Error is { } error)
+        {
+            return this.Fail<CommentModel>(error.Type, error.Message);
+        }
 
-            if (!access.CanParticipate)
-            {
-                return Result.Fail<CommentModel>(ErrorType.Forbidden, "Коментувати завдання можуть лише учасники проєкту.");
-            }
+        if (!access.CanParticipate)
+        {
+            return this.Fail<CommentModel>(ErrorType.Forbidden, "Коментувати завдання можуть лише учасники проєкту.");
+        }
 
-            var comment = new Comment
-            {
-                Id = Guid.NewGuid(),
-                TaskId = taskId,
-                AuthorId = currentUserId,
-                Content = trimmedContent,
-                CreatedAt = DateTime.UtcNow,
-            };
+        var comment = new Comment
+        {
+            Id = Guid.NewGuid(),
+            TaskId = taskId,
+            AuthorId = currentUserId,
+            Content = trimmedContent,
+            CreatedAt = DateTime.UtcNow,
+        };
 
-            await this.commentRepository.AddAsync(comment);
-            this.Logger.Information("Користувач {UserId} прокоментував завдання {TaskId} (коментар {CommentId})", currentUserId, taskId, comment.Id);
+        await this.commentRepository.AddAsync(comment);
+        this.Logger.Information("Користувач {UserId} прокоментував завдання {TaskId} (коментар {CommentId})", currentUserId, taskId, comment.Id);
 
-            return Result.Ok(ToModel(comment, null, access.Role, currentUserId, access.IsProjectOwner));
-        });
+        return Result.Ok(ToModel(comment, null, access.Role, currentUserId, access.IsProjectOwner));
     }
 
-    public Task<Result> DeleteAsync(Guid commentId, Guid currentUserId)
+    public async Task<Result> DeleteAsync(Guid commentId, Guid currentUserId)
     {
-        return this.ExecuteAsync("Видалення коментаря", async () =>
+        if (commentId == Guid.Empty || currentUserId == Guid.Empty)
         {
-            if (commentId == Guid.Empty || currentUserId == Guid.Empty)
-            {
-                return Result.Fail(ErrorType.Validation, "Не вказано коментар або користувача.");
-            }
+            return this.Fail(ErrorType.Validation, "Не вказано коментар або користувача.");
+        }
 
-            var comment = await this.commentRepository.GetByIdAsync(commentId);
-            if (comment is null)
-            {
-                return Result.Fail(ErrorType.NotFound, "Коментар не знайдено. Можливо, його вже видалили.");
-            }
+        var comment = await this.commentRepository.GetByIdAsync(commentId);
+        if (comment is null)
+        {
+            return this.Fail(ErrorType.NotFound, "Коментар не знайдено. Можливо, його вже видалили.");
+        }
 
-            var access = await this.GetAccessAsync(comment.TaskId, currentUserId);
-            if (access.Error is { } error)
-            {
-                return Result.Fail(error.Type, error.Message);
-            }
+        var access = await this.GetAccessAsync(comment.TaskId, currentUserId);
+        if (access.Error is { } error)
+        {
+            return this.Fail(error.Type, error.Message);
+        }
 
-            if (comment.AuthorId != currentUserId && !access.IsProjectOwner)
-            {
-                return Result.Fail(ErrorType.Forbidden, "Видалити коментар може лише його автор або власник проєкту.");
-            }
+        if (comment.AuthorId != currentUserId && !access.IsProjectOwner)
+        {
+            return this.Fail(ErrorType.Forbidden, "Видалити коментар може лише його автор або власник проєкту.");
+        }
 
-            await this.commentRepository.DeleteAsync(commentId);
-            this.Logger.Information("Користувач {UserId} видалив коментар {CommentId} завдання {TaskId}", currentUserId, commentId, comment.TaskId);
+        await this.commentRepository.DeleteAsync(commentId);
+        this.Logger.Information("Користувач {UserId} видалив коментар {CommentId} завдання {TaskId}", currentUserId, commentId, comment.TaskId);
 
-            return Result.Ok();
-        });
+        return Result.Ok();
     }
 
     private static CommentModel ToModel(Comment comment, string? authorName, ProjectRole? authorRole, Guid currentUserId, bool isProjectOwner)

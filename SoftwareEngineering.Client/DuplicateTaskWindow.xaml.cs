@@ -45,7 +45,7 @@ public partial class DuplicateTaskWindow : Window
 
     private async void CreateButton_Click(object sender, RoutedEventArgs e)
     {
-        CreateButton.IsEnabled = false;
+        using var busy = UiBusy.Disable(CreateButton);
         var result = await taskService.DuplicateAsync(
             source.Id,
             new DuplicateTaskModel
@@ -55,7 +55,6 @@ public partial class DuplicateTaskWindow : Window
                 CopySubtasks = CopySubtasksCheckBox.IsChecked == true,
             },
             currentUserId);
-        CreateButton.IsEnabled = true;
 
         if (result.ShowIfFailed("Копію не створено"))
         {

@@ -1,6 +1,4 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Npgsql;
-using SoftwareEngineering.DAL.Exceptions;
 using SoftwareEngineering.DAL.Entities;
 
 namespace SoftwareEngineering.DAL.Repositories;
@@ -14,31 +12,26 @@ public class TaskRepository : ITaskRepository
         this.contextFactory = contextFactory;
     }
 
-    private const string TaskCodeIndexName = "ix_tasks_project_id_task_code";
-
-    public async Task<IReadOnlyList<string>> GetTaskCodesAsync(Guid projectId)
+    public async Task AddAsync(TaskItem task, Func<IReadOnlyList<string>, string> generateCode)
     {
         await using var context = await this.contextFactory.CreateDbContextAsync();
-        return await context.Tasks
+
+        // Транзакція, яку не закомітили, відкочується сама при виході з методу — try/catch не потрібен
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        // Блокуємо рядок проєкту: інше створення завдання в цьому ж проєкті чекатиме тут, доки ми не закомітимо
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM projects WHERE id = {task.ProjectId} FOR UPDATE");
+
+        var existingCodes = await context.Tasks
             .AsNoTracking()
-            .Where(task => task.ProjectId == projectId)
-            .Select(task => task.TaskCode)
+            .Where(existing => existing.ProjectId == task.ProjectId)
+            .Select(existing => existing.TaskCode)
             .ToListAsync();
-    }
 
-    public async Task AddAsync(TaskItem task)
-    {
-        await using var context = await this.contextFactory.CreateDbContextAsync();
+        task.TaskCode = generateCode(existingCodes);
         context.Tasks.Add(task);
-
-        try
-        {
-            await context.SaveChangesAsync();
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: TaskCodeIndexName })
-        {
-            throw new DuplicateTaskCodeException(task.TaskCode, ex);
-        }
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     public async Task<IEnumerable<TaskItem>> GetAsync()
