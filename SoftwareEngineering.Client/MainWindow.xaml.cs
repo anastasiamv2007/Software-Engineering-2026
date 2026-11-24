@@ -60,6 +60,12 @@ namespace SoftwareEngineering.Client
             DelUserIdTextBox.IsReadOnly = true;
 
             DeadlineDatePicker.SelectedDate = DateTime.Now.AddDays(1);
+
+            // Перемикачі теми показують поточний вибір; відписуємось при закритті, щоб статична подія не тримала вікно після виходу
+            SyncThemeControls();
+            ThemeManager.ThemeChanged += OnThemeChanged;
+            Closed += (_, _) => ThemeManager.ThemeChanged -= OnThemeChanged;
+
             Loaded += async (_, _) =>
             {
                 // Категорії потрібні для фільтра на сторінці завдань
@@ -589,16 +595,16 @@ namespace SoftwareEngineering.Client
             DetailsTitleText.Text = task.Title;
 
             DetailsBadges.Children.Clear();
-            DetailsBadges.Children.Add(CreateBadge(StatusText(task.Status), "#DBEAFE", "#1D4ED8"));
-            DetailsBadges.Children.Add(CreateBadge($"Пріоритет: {PriorityText(task.Priority)}", "#F1F5F9", "#334155"));
+            DetailsBadges.Children.Add(CreateBadge(StatusText(task.Status), "Brush.AccentSoft", "Brush.AccentSoftText"));
+            DetailsBadges.Children.Add(CreateBadge($"Пріоритет: {PriorityText(task.Priority)}", "Brush.SurfaceAlt", "Brush.TextSecondary"));
             if (details.IsOverdue)
             {
-                DetailsBadges.Children.Add(CreateBadge("Прострочено", "#FEE2E2", "#B91C1C"));
+                DetailsBadges.Children.Add(CreateBadge("Прострочено", "Brush.DangerSoft", "Brush.DangerSoftText"));
             }
 
             if (details.CategoryName != null)
             {
-                DetailsBadges.Children.Add(CreateBadge(details.CategoryName, details.CategoryColorHex ?? "#E2E8F0", "#FFFFFF"));
+                DetailsBadges.Children.Add(CreateCategoryBadge(details.CategoryName, details.CategoryColorHex ?? "#64748B"));
             }
 
             ShowDescription(task.Description);
@@ -653,8 +659,10 @@ namespace SoftwareEngineering.Client
             var row = DetailsInfoGrid.RowDefinitions.Count;
             DetailsInfoGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            var labelText = new TextBlock { Text = label, Foreground = ToBrush("#64748B"), Margin = new Thickness(0, 6, 12, 6) };
-            var valueText = new TextBlock { Text = value, Foreground = ToBrush("#0F172A"), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 6) };
+            var labelText = new TextBlock { Text = label, Margin = new Thickness(0, 6, 12, 6) };
+            var valueText = new TextBlock { Text = value, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 6) };
+            labelText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.TextMuted");
+            valueText.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text");
             Grid.SetRow(labelText, row);
             Grid.SetRow(valueText, row);
             Grid.SetColumn(valueText, 1);
@@ -663,15 +671,33 @@ namespace SoftwareEngineering.Client
             DetailsInfoGrid.Children.Add(valueText);
         }
 
-        private static Border CreateBadge(string text, string background, string foreground)
+        // Кольори беремо як посилання на ресурси теми: при перемиканні теми бейдж перефарбується сам
+        private static Border CreateBadge(string text, string backgroundKey, string foregroundKey)
         {
-            return new Border
+            var label = new TextBlock { Text = text, FontSize = 12, FontWeight = FontWeights.SemiBold };
+            label.SetResourceReference(TextBlock.ForegroundProperty, foregroundKey);
+
+            var badge = new Border
             {
-                Background = ToBrush(background),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(10, 3, 10, 3),
                 Margin = new Thickness(0, 0, 8, 4),
-                Child = new TextBlock { Text = text, Foreground = ToBrush(foreground), FontSize = 12, FontWeight = FontWeights.SemiBold },
+                Child = label,
+            };
+            badge.SetResourceReference(Border.BackgroundProperty, backgroundKey);
+            return badge;
+        }
+
+        // Категорія має власний колір, обраний користувачем, — він однаковий в обох темах
+        private static Border CreateCategoryBadge(string text, string colorHex)
+        {
+            return new Border
+            {
+                Background = ToBrush(colorHex),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(10, 3, 10, 3),
+                Margin = new Thickness(0, 0, 8, 4),
+                Child = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 12, FontWeight = FontWeights.SemiBold },
             };
         }
 
@@ -930,7 +956,7 @@ namespace SoftwareEngineering.Client
             foreach (Button button in CatPalette.Children)
             {
                 button.BorderThickness = new Thickness((string)button.Tag == hex ? 3 : 0);
-                button.BorderBrush = Brushes.Black;
+                button.SetResourceReference(Button.BorderBrushProperty, "Brush.Text");
             }
         }
 
@@ -1490,7 +1516,9 @@ namespace SoftwareEngineering.Client
             var paragraph = new Paragraph { Margin = new Thickness(0) };
             if (shownDescription == null)
             {
-                paragraph.Inlines.Add(new Run("Немає опису") { Foreground = Brushes.Gray, FontStyle = FontStyles.Italic });
+                var placeholder = new Run("Немає опису") { FontStyle = FontStyles.Italic };
+                placeholder.SetResourceReference(TextElement.ForegroundProperty, "Brush.TextFaint");
+                paragraph.Inlines.Add(placeholder);
             }
             else
             {
@@ -1556,6 +1584,48 @@ namespace SoftwareEngineering.Client
             CopyDescriptionButton.Content = "Скопійовано ✓";
             await Task.Delay(TimeSpan.FromSeconds(1.5));
             CopyDescriptionButton.Content = "Копіювати";
+        }
+
+        // ---------- Тема оформлення ----------
+
+        private bool syncingThemeControls;
+
+        private void OnThemeChanged(object? sender, EventArgs e)
+        {
+            SyncThemeControls();
+        }
+
+        private void SyncThemeControls()
+        {
+            // Програмна зміна IsChecked теж викликає Checked — прапорець не дає їй знову зберегти тему
+            syncingThemeControls = true;
+            foreach (var option in ThemeOptions.Children.OfType<RadioButton>())
+            {
+                option.IsChecked = option.Tag as string == ThemeManager.Preference.ToString();
+            }
+
+            syncingThemeControls = false;
+
+            ThemeToggleButton.Content = ThemeManager.IsDark ? "☀  Світла тема" : "☾  Темна тема";
+        }
+
+        private void ThemeRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (syncingThemeControls || sender is not RadioButton { Tag: string tag } || !Enum.TryParse(tag, out AppTheme theme))
+            {
+                return;
+            }
+
+            if (theme != ThemeManager.Preference)
+            {
+                ThemeManager.SetPreference(theme);
+            }
+        }
+
+        private void ThemeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            // З темної — на світлу; зі світлої — на ту темну, яку обирали останньою
+            ThemeManager.SetPreference(ThemeManager.IsDark ? AppTheme.Light : ThemeManager.LastDarkTheme);
         }
     }
 }

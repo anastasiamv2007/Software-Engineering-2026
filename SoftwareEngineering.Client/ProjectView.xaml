@@ -5,7 +5,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              mc:Ignorable="d" 
              d:DesignHeight="600" d:DesignWidth="900"
-             Background="#F8F9FA" Loaded="UserControl_Loaded">
+             Background="{DynamicResource Brush.Window}" Loaded="UserControl_Loaded" Foreground="{DynamicResource Brush.Text}">
 
     <Grid Margin="20">
         <Grid.ColumnDefinitions>
@@ -17,7 +17,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- ЛІВА ПАНЕЛЬ -->
-        <Border Grid.Column="0" Background="White" CornerRadius="8" Padding="15">
+        <Border Grid.Column="0" Background="{DynamicResource Brush.Surface}" CornerRadius="8" Padding="15">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -25,10 +25,10 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Text="Пул проєктів" FontSize="20" FontWeight="Bold" Foreground="#2C3E50" Margin="0,0,0,15"/>
+                <TextBlock Text="Пул проєктів" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource Brush.Text}" Margin="0,0,0,15"/>
 
                 <Button Grid.Row="1" x:Name="BtnCreateNew" Content="+ Створити проєкт" 
-                        Height="38" Background="#27AE60" Foreground="White" FontWeight="SemiBold"
+                        Height="38" Background="{DynamicResource Brush.Success}" Foreground="White" FontWeight="SemiBold"
                         BorderThickness="0" Cursor="Hand" Click="BtnCreateNew_Click" Margin="0,0,0,15"/>
 
                 <ListBox Grid.Row="2" x:Name="LstProjects" 
@@ -39,7 +39,7 @@
         </Border>
 
         <!-- ПРАВА ПАНЕЛЬ -->
-        <Border Grid.Column="2" Background="White" CornerRadius="8" Padding="25">
+        <Border Grid.Column="2" Background="{DynamicResource Brush.Surface}" CornerRadius="8" Padding="25">
             <Grid x:Name="DetailsPanel" Visibility="Collapsed">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -51,7 +51,7 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock x:Name="TxtHeader" Text="Редагування проєкту" FontSize="18" FontWeight="Bold" Foreground="#2C3E50" Margin="0,0,0,20"/>
+                <TextBlock x:Name="TxtHeader" Text="Редагування проєкту" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource Brush.Text}" Margin="0,0,0,20"/>
 
                 <StackPanel Grid.Row="1" Margin="0,0,0,15">
                     <TextBlock Text="Назва проєкту:" FontWeight="SemiBold" Margin="0,0,0,5"/>
@@ -59,11 +59,11 @@
                 </StackPanel>
 
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,20">
-                    <TextBlock Text="Кількість тасків: " Foreground="#7F8C8D"/>
-                    <TextBlock x:Name="TxtTasksCount" Text="0" FontWeight="Bold" Foreground="#2C3E50" Margin="5,0,20,0"/>
+                    <TextBlock Text="Кількість тасків: " Foreground="{DynamicResource Brush.TextMuted}"/>
+                    <TextBlock x:Name="TxtTasksCount" Text="0" FontWeight="Bold" Foreground="{DynamicResource Brush.Text}" Margin="5,0,20,0"/>
 
-                    <TextBlock Text="Створено: " Foreground="#7F8C8D"/>
-                    <TextBlock x:Name="TxtCreatedAt" Text="-" FontWeight="Bold" Foreground="#2C3E50" Margin="5,0,0,0"/>
+                    <TextBlock Text="Створено: " Foreground="{DynamicResource Brush.TextMuted}"/>
+                    <TextBlock x:Name="TxtCreatedAt" Text="-" FontWeight="Bold" Foreground="{DynamicResource Brush.Text}" Margin="5,0,0,0"/>
                 </StackPanel>
 
                 <!-- НОВА ПАНЕЛЬ ДЛЯ СПІВВИКОНАВЦЯ -->
@@ -76,7 +76,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="TxtCoExecutorEmail" Grid.Column="0" Height="36" VerticalContentAlignment="Center" Padding="8,0" FontSize="14" Margin="0,0,10,0"/>
                         <Button x:Name="BtnAddCoExecutor" Grid.Column="1" Content="Додати" Width="100" Height="36" 
-                                Background="#27AE60" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                                Background="{DynamicResource Brush.Success}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
                                 Click="BtnAddCoExecutor_Click"/>
                     </Grid>
                 </StackPanel>
@@ -88,10 +88,10 @@
                         <ItemsControl x:Name="MembersList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="0,6">
+                                    <Border BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1" Padding="0,6">
                                         <DockPanel>
                                             <Button DockPanel.Dock="Right" Content="✕" Width="28" Height="24" Padding="0"
-                                                    Background="Transparent" BorderThickness="0" Foreground="#E74C3C" Cursor="Hand"
+                                                    Background="Transparent" BorderThickness="0" Foreground="{DynamicResource Brush.DangerText}" Cursor="Hand"
                                                     ToolTip="Видалити учасника" Tag="{Binding UserId}" Click="BtnRemoveMember_Click"
                                                     Visibility="{Binding RemoveVisibility}"/>
                                             <!-- Роль: Owner змінює її у списку (крім себе), решта бачить лише підпис -->
@@ -99,11 +99,11 @@
                                                       ItemsSource="{Binding RoleOptions}" DisplayMemberPath="Title" SelectedValuePath="Role"
                                                       SelectedValue="{Binding Role, Mode=OneWay}" Visibility="{Binding RoleComboVisibility}"
                                                       SelectionChanged="CmbMemberRole_SelectionChanged"/>
-                                            <TextBlock DockPanel.Dock="Right" Text="{Binding RoleTitle}" Foreground="#7F8C8D" VerticalAlignment="Center" Margin="0,0,12,0"
+                                            <TextBlock DockPanel.Dock="Right" Text="{Binding RoleTitle}" Foreground="{DynamicResource Brush.TextMuted}" VerticalAlignment="Center" Margin="0,0,12,0"
                                                        Visibility="{Binding RoleTextVisibility}"/>
                                             <StackPanel>
-                                                <TextBlock Text="{Binding FullName}" FontWeight="SemiBold" Foreground="#2C3E50"/>
-                                                <TextBlock Text="{Binding Email}" FontSize="12" Foreground="#7F8C8D"/>
+                                                <TextBlock Text="{Binding FullName}" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Text}"/>
+                                                <TextBlock Text="{Binding Email}" FontSize="12" Foreground="{DynamicResource Brush.TextMuted}"/>
                                             </StackPanel>
                                         </DockPanel>
                                     </Border>
@@ -116,15 +116,15 @@
                 <!-- Кнопки керування проєктом (лише для Owner) -->
                 <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="BtnTransferOwnership" Content="Передати власність" Width="155" Height="36" 
-                            Background="#D97706" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" 
+                            Background="{DynamicResource Brush.Warning}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" 
                             Click="BtnTransferOwnership_Click" Margin="0,0,10,0"/>
 
                     <Button x:Name="BtnDelete" Content="Видалити" Width="100" Height="36" 
-                            Background="#E74C3C" Foreground="White" BorderThickness="0" Cursor="Hand" 
+                            Background="{DynamicResource Brush.Danger}" Foreground="White" BorderThickness="0" Cursor="Hand" 
                             Click="BtnDelete_Click" Margin="0,0,10,0"/>
 
                     <Button x:Name="BtnSave" Content="Зберегти" Width="120" Height="36" 
-                            Background="#2980B9" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" 
+                            Background="{DynamicResource Brush.Accent}" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" 
                             Click="BtnSave_Click"/>
                 </StackPanel>
             </Grid>

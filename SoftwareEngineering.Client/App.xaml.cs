@@ -28,6 +28,9 @@ public partial class App : Application
         ConfigureLogging();
         RegisterGlobalExceptionHandlers();
 
+        // Тема — до першого вікна, щоб воно одразу відкрилось у потрібних кольорах
+        ThemeManager.Initialize();
+
         // Завжди починаємо з вибору бази: звідти вже відкривається вікно логіну
         ShowDatabaseSelection();
     }
