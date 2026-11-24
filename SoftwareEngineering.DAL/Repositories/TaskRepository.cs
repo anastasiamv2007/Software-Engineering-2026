@@ -12,17 +12,26 @@ public class TaskRepository : ITaskRepository
         this.contextFactory = contextFactory;
     }
 
-    public async Task<int> CountByProjectAsync(Guid projectId)
+    public async Task AddAsync(TaskItem task, Func<IReadOnlyList<string>, string> generateCode)
     {
         await using var context = await this.contextFactory.CreateDbContextAsync();
-        return await context.Tasks.CountAsync(task => task.ProjectId == projectId);
-    }
 
-    public async Task AddAsync(TaskItem task)
-    {
-        await using var context = await this.contextFactory.CreateDbContextAsync();
+        // Транзакція, яку не закомітили, відкочується сама при виході з методу — try/catch не потрібен
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        // Блокуємо рядок проєкту: інше створення завдання в цьому ж проєкті чекатиме тут, доки ми не закомітимо
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM projects WHERE id = {task.ProjectId} FOR UPDATE");
+
+        var existingCodes = await context.Tasks
+            .AsNoTracking()
+            .Where(existing => existing.ProjectId == task.ProjectId)
+            .Select(existing => existing.TaskCode)
+            .ToListAsync();
+
+        task.TaskCode = generateCode(existingCodes);
         context.Tasks.Add(task);
         await context.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     public async Task<IEnumerable<TaskItem>> GetAsync()

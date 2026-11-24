@@ -6,10 +6,21 @@ using SoftwareEngineering.DAL.Enums;
 namespace SoftwareEngineering.BLL.Services;
 
 /// <summary>
-/// Фільтрація та сортування завдань у пам'яті. Чиста логіка без БД — помилки повертаються через Result, а не винятками.
+/// Фільтрація та сортування завдань у пам'яті. Чиста логіка без БД: некоректні критерії повертаються через Result,
+/// а винятків тут немає звідки взятися (непередбачене ловить глобальний обробник у App).
 /// </summary>
 public static class TaskFilter
 {
+    // Порядок груп за ходом роботи; значення enum стоять інакше (Done раніше за NeedsRevision)
+    private static readonly TaskItemStatus[] StatusOrder =
+    {
+        TaskItemStatus.Todo,
+        TaskItemStatus.InProgress,
+        TaskItemStatus.NeedsRevision,
+        TaskItemStatus.InReview,
+        TaskItemStatus.Done,
+    };
+
     public static Result<IReadOnlyList<TaskModel>> Apply(IEnumerable<TaskModel> tasks, TaskFilterCriteria criteria)
     {
         if (tasks == null)
@@ -24,57 +35,83 @@ public static class TaskFilter
             return Result.Fail<IReadOnlyList<TaskModel>>(ErrorType.Validation, "Критерії фільтрації не можуть бути null.");
         }
 
-        try
+        if (criteria.DeadlineFrom.HasValue && criteria.DeadlineTo.HasValue &&
+            criteria.DeadlineFrom.Value.Date > criteria.DeadlineTo.Value.Date)
         {
-            var query = tasks;
-            var now = DateTime.UtcNow;
-
-            // Фільтри поєднуються через AND
-            if (criteria.Status.HasValue)
-            {
-                query = query.Where(t => t.Status == criteria.Status.Value);
-            }
-
-            if (criteria.Priority.HasValue)
-            {
-                query = query.Where(t => t.Priority == criteria.Priority.Value);
-            }
-
-            if (criteria.CategoryId.HasValue)
-            {
-                query = query.Where(t => t.CategoryId == criteria.CategoryId.Value);
-            }
-
-            // Прострочена: дедлайн минув, а статус не Done
-            if (criteria.OnlyOverdue)
-            {
-                query = query.Where(t => t.Status != TaskItemStatus.Done &&
-                                         t.Deadline.HasValue &&
-                                         t.Deadline.Value.ToUniversalTime() < now);
-            }
-
-            query = criteria.SortBy switch
-            {
-                TaskSortOption.ByTitleAsc => query.OrderBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase),
-
-                // У enum TaskPriority High = 0, Low = 2, тому High → Low — це сортування за зростанням
-                TaskSortOption.ByPriorityDesc => query.OrderBy(t => t.Priority),
-
-                // Завдання без дедлайну завжди йдуть у кінець
-                _ => query.OrderBy(t => t.Deadline.HasValue ? 0 : 1).ThenBy(t => t.Deadline),
-            };
-
-            var resultList = query.ToList();
-
-            // Debug, бо фільтр викликається на кожну зміну пошуку — Information засмічував би Seq
-            Log.Debug("Фільтрацію застосовано: знайдено {Count} завдань", resultList.Count);
-
-            return Result.Ok<IReadOnlyList<TaskModel>>(resultList);
+            Log.Debug("Період фільтра задано навпаки: {From} > {To}", criteria.DeadlineFrom, criteria.DeadlineTo);
+            return Result.Fail<IReadOnlyList<TaskModel>>(ErrorType.Validation, "Дата «з» не може бути пізнішою за дату «по».");
         }
-        catch (Exception ex)
+
+        var query = tasks;
+        var now = DateTime.UtcNow;
+
+        // Фільтри поєднуються через AND
+        if (criteria.Status.HasValue)
         {
-            Log.Error(ex, "Помилка під час виконання TaskFilter.Apply");
-            return Result.Fail<IReadOnlyList<TaskModel>>(ErrorType.Unexpected, "Не вдалося застосувати фільтр. Спробуйте ще раз.");
+            query = query.Where(t => t.Status == criteria.Status.Value);
         }
+
+        if (criteria.Priority.HasValue)
+        {
+            query = query.Where(t => t.Priority == criteria.Priority.Value);
+        }
+
+        if (criteria.CategoryId.HasValue)
+        {
+            query = query.Where(t => t.CategoryId == criteria.CategoryId.Value);
+        }
+
+        // Прострочена: дедлайн минув, а статус не Done
+        if (criteria.OnlyOverdue)
+        {
+            query = query.Where(t => t.Status != TaskItemStatus.Done &&
+                                     t.Deadline.HasValue &&
+                                     t.Deadline.Value.ToUniversalTime() < now);
+        }
+
+        // Період порівнюємо за місцевою датою дедлайну: задача на 20.11 23:30 належить до 20.11, а не до 21.11 за UTC.
+        // Завдання без дедлайну в жоден період не потрапляють
+        if (criteria.DeadlineFrom.HasValue)
+        {
+            var from = criteria.DeadlineFrom.Value.Date;
+            query = query.Where(t => t.Deadline.HasValue && t.Deadline.Value.ToLocalTime().Date >= from);
+        }
+
+        if (criteria.DeadlineTo.HasValue)
+        {
+            var to = criteria.DeadlineTo.Value.Date;
+            query = query.Where(t => t.Deadline.HasValue && t.Deadline.Value.ToLocalTime().Date <= to);
+        }
+
+        query = criteria.SortBy switch
+        {
+            TaskSortOption.ByTitleAsc => query.OrderBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase),
+
+            // У enum TaskPriority High = 0, Low = 2, тому High → Low — це сортування за зростанням
+            TaskSortOption.ByPriorityDesc => query.OrderBy(t => t.Priority),
+
+            // Групи за ходом роботи, усередині групи — найближчий дедлайн першим
+            TaskSortOption.ByStatus => query
+                .OrderBy(t => StatusRank(t.Status))
+                .ThenBy(t => t.Deadline.HasValue ? 0 : 1)
+                .ThenBy(t => t.Deadline),
+
+            // Завдання без дедлайну завжди йдуть у кінець
+            _ => query.OrderBy(t => t.Deadline.HasValue ? 0 : 1).ThenBy(t => t.Deadline),
+        };
+
+        var resultList = query.ToList();
+
+        // Debug, бо фільтр викликається на кожну зміну пошуку — Information засмічував би Seq
+        Log.Debug("Фільтрацію застосовано: знайдено {Count} завдань", resultList.Count);
+
+        return Result.Ok<IReadOnlyList<TaskModel>>(resultList);
+    }
+
+    // Невідомий (новий) статус іде в кінець, а не ламає сортування
+    private static int StatusRank(TaskItemStatus status)
+    {
+        var index = Array.IndexOf(StatusOrder, status);
+        return index >= 0 ? index : StatusOrder.Length;
     }
 }

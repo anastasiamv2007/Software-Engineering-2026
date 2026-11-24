@@ -184,5 +184,191 @@ namespace SoftwareEngineering.Tests
 
             Assert.Equal(ErrorType.Validation, result.Error!.Type);
         }
+
+        // №5. Період за дедлайном: обидві межі включно, задачі без дедлайну не потрапляють
+        [Fact]
+        public void Apply_DeadlineRange_ReturnsTasksInsideRangeInclusive()
+        {
+            // Arrange
+            var tasks = new List<TaskModel>
+            {
+                new() { Title = "до періоду", Deadline = LocalDate(2026, 11, 9) },
+                new() { Title = "перший день", Deadline = LocalDate(2026, 11, 10) },
+                new() { Title = "середина", Deadline = LocalDate(2026, 11, 15) },
+                new() { Title = "останній день", Deadline = LocalDate(2026, 11, 20, 23, 30) },
+                new() { Title = "після періоду", Deadline = LocalDate(2026, 11, 21) },
+                new() { Title = "без дедлайну", Deadline = null },
+            };
+            var criteria = new TaskFilterCriteria
+            {
+                DeadlineFrom = new DateTime(2026, 11, 10),
+                DeadlineTo = new DateTime(2026, 11, 20),
+                SortBy = TaskSortOption.ByDeadlineAsc,
+            };
+
+            // Act
+            var result = TaskFilter.Apply(tasks, criteria);
+
+            // Assert
+            Assert.Equal(new[] { "перший день", "середина", "останній день" }, result.Value!.Select(t => t.Title));
+        }
+
+        // Можна задати лише одну межу: «з» — усе від дати і далі
+        [Fact]
+        public void Apply_OnlyDeadlineFrom_ReturnsTasksFromThatDate()
+        {
+            // Arrange
+            var tasks = new List<TaskModel>
+            {
+                new() { Title = "раніше", Deadline = LocalDate(2026, 11, 1) },
+                new() { Title = "пізніше", Deadline = LocalDate(2026, 12, 1) },
+            };
+            var criteria = new TaskFilterCriteria { DeadlineFrom = new DateTime(2026, 11, 15) };
+
+            // Act
+            var result = TaskFilter.Apply(tasks, criteria);
+
+            // Assert
+            Assert.Equal("пізніше", Assert.Single(result.Value!).Title);
+        }
+
+        // «по» — усе до дати включно
+        [Fact]
+        public void Apply_OnlyDeadlineTo_ReturnsTasksUntilThatDate()
+        {
+            // Arrange
+            var tasks = new List<TaskModel>
+            {
+                new() { Title = "раніше", Deadline = LocalDate(2026, 11, 1) },
+                new() { Title = "пізніше", Deadline = LocalDate(2026, 12, 1) },
+            };
+            var criteria = new TaskFilterCriteria { DeadlineTo = new DateTime(2026, 11, 15) };
+
+            // Act
+            var result = TaskFilter.Apply(tasks, criteria);
+
+            // Assert
+            Assert.Equal("раніше", Assert.Single(result.Value!).Title);
+        }
+
+        // Межі переплутано — Result з помилкою валідації замість порожнього списку чи винятку
+        [Fact]
+        public void Apply_DeadlineFromAfterTo_ReturnsValidationError()
+        {
+            // Arrange
+            var criteria = new TaskFilterCriteria
+            {
+                DeadlineFrom = new DateTime(2026, 11, 20),
+                DeadlineTo = new DateTime(2026, 11, 10),
+            };
+
+            // Act
+            var result = TaskFilter.Apply(new List<TaskModel>(), criteria);
+
+            // Assert
+            Assert.False(result.IsSuccess);
+            Assert.Equal(ErrorType.Validation, result.Error!.Type);
+        }
+
+        // Один день у «з» і «по» — це фільтр на конкретну дату
+        [Fact]
+        public void Apply_SameDayRange_ReturnsTasksOfThatDayOnly()
+        {
+            // Arrange
+            var tasks = new List<TaskModel>
+            {
+                new() { Title = "вранці", Deadline = LocalDate(2026, 11, 18, 8, 0) },
+                new() { Title = "ввечері", Deadline = LocalDate(2026, 11, 18, 22, 0) },
+                new() { Title = "наступного дня", Deadline = LocalDate(2026, 11, 19, 0, 30) },
+            };
+            var day = new DateTime(2026, 11, 18);
+            var criteria = new TaskFilterCriteria { DeadlineFrom = day, DeadlineTo = day };
+
+            // Act
+            var result = TaskFilter.Apply(tasks, criteria);
+
+            // Assert
+            Assert.Equal(new[] { "вранці", "ввечері" }, result.Value!.Select(t => t.Title));
+        }
+
+        // №9. Сортування за статусом: групи за ходом роботи, а не за числом у enum (Done = 3, NeedsRevision = 4)
+        [Fact]
+        public void Apply_SortByStatus_GroupsInWorkflowOrder()
+        {
+            // Arrange
+            var tasks = new List<TaskModel>
+            {
+                new() { Title = "виконано", Status = TaskItemStatus.Done },
+                new() { Title = "на доопрацюванні", Status = TaskItemStatus.NeedsRevision },
+                new() { Title = "до виконання", Status = TaskItemStatus.Todo },
+                new() { Title = "на перевірці", Status = TaskItemStatus.InReview },
+                new() { Title = "в роботі", Status = TaskItemStatus.InProgress },
+            };
+            var criteria = new TaskFilterCriteria { SortBy = TaskSortOption.ByStatus };
+
+            // Act
+            var result = TaskFilter.Apply(tasks, criteria);
+
+            // Assert
+            Assert.Equal(
+                new[] { "до виконання", "в роботі", "на доопрацюванні", "на перевірці", "виконано" },
+                result.Value!.Select(t => t.Title));
+        }
+
+        // Усередині групи — найближчий дедлайн першим, без дедлайну — в кінці групи
+        [Fact]
+        public void Apply_SortByStatus_InsideGroupOrdersByDeadlineWithNullsLast()
+        {
+            // Arrange
+            var tasks = new List<TaskModel>
+            {
+                new() { Title = "todo без дедлайну", Status = TaskItemStatus.Todo, Deadline = null },
+                new() { Title = "todo пізня", Status = TaskItemStatus.Todo, Deadline = LocalDate(2026, 12, 1) },
+                new() { Title = "todo рання", Status = TaskItemStatus.Todo, Deadline = LocalDate(2026, 11, 20) },
+                new() { Title = "в роботі", Status = TaskItemStatus.InProgress, Deadline = LocalDate(2026, 11, 1) },
+            };
+            var criteria = new TaskFilterCriteria { SortBy = TaskSortOption.ByStatus };
+
+            // Act
+            var result = TaskFilter.Apply(tasks, criteria);
+
+            // Assert
+            Assert.Equal(
+                new[] { "todo рання", "todo пізня", "todo без дедлайну", "в роботі" },
+                result.Value!.Select(t => t.Title));
+        }
+
+        // Період і сортування за статусом працюють разом з іншими фільтрами
+        [Fact]
+        public void Apply_DeadlineRangeWithStatusSortAndPriority_CombinesFilters()
+        {
+            // Arrange
+            var tasks = new List<TaskModel>
+            {
+                new() { Title = "підходить, виконано", Status = TaskItemStatus.Done, Priority = TaskPriority.High, Deadline = LocalDate(2026, 11, 12) },
+                new() { Title = "підходить, в роботі", Status = TaskItemStatus.InProgress, Priority = TaskPriority.High, Deadline = LocalDate(2026, 11, 14) },
+                new() { Title = "не той пріоритет", Status = TaskItemStatus.Todo, Priority = TaskPriority.Low, Deadline = LocalDate(2026, 11, 13) },
+                new() { Title = "поза періодом", Status = TaskItemStatus.Todo, Priority = TaskPriority.High, Deadline = LocalDate(2026, 12, 13) },
+            };
+            var criteria = new TaskFilterCriteria
+            {
+                Priority = TaskPriority.High,
+                DeadlineFrom = new DateTime(2026, 11, 10),
+                DeadlineTo = new DateTime(2026, 11, 20),
+                SortBy = TaskSortOption.ByStatus,
+            };
+
+            // Act
+            var result = TaskFilter.Apply(tasks, criteria);
+
+            // Assert
+            Assert.Equal(new[] { "підходить, в роботі", "підходить, виконано" }, result.Value!.Select(t => t.Title));
+        }
+
+        // Дедлайн у БД зберігається в UTC; у тестах задаємо місцевий час і переводимо, як це робить Npgsql
+        private static DateTime LocalDate(int year, int month, int day, int hour = 12, int minute = 0)
+        {
+            return new DateTime(year, month, day, hour, minute, 0, DateTimeKind.Local).ToUniversalTime();
+        }
 }
 }

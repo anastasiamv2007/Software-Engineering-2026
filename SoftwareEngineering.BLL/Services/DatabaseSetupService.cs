@@ -4,6 +4,7 @@ using Npgsql;
 using Serilog;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.DAL;
 
 namespace SoftwareEngineering.BLL.Services;
@@ -86,7 +87,7 @@ public class DatabaseSetupService : IDatabaseSetupService
         }
     }
 
-    public async Task ApplyMigrationsAsync(string connectionString, CancellationToken cancellationToken = default)
+    public async Task<Result> ApplyMigrationsAsync(string connectionString, CancellationToken cancellationToken = default)
     {
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
         optionsBuilder.UseNpgsql(connectionString).UseSnakeCaseNamingConvention();
@@ -114,6 +115,8 @@ public class DatabaseSetupService : IDatabaseSetupService
             {
                 Logger.Information("Структура БД {Database} на {Host} актуальна, міграції не потрібні", target.Database, target.Host);
             }
+
+            return Result.Ok();
         }
         catch (PostgresException ex)
         {
@@ -124,12 +127,13 @@ public class DatabaseSetupService : IDatabaseSetupService
                 target.Host,
                 ex.SqlState,
                 ex.MessageText);
-            throw;
+            return Result.Fail(ErrorType.Unexpected, $"Помилка бази даних під час оновлення структури: {ex.MessageText}");
         }
         catch (Exception ex)
         {
+            // Межа з інфраструктурою (мережа, PostgreSQL): тут виняток — очікуваний варіант результату
             Logger.Error(ex, "Не вдалося застосувати міграції до БД {Database} на {Host}", target.Database, target.Host);
-            throw;
+            return Result.Fail(ErrorType.Unexpected, "Не вдалося оновити структуру бази даних. Перевірте підключення.");
         }
     }
 
@@ -145,9 +149,12 @@ public class DatabaseSetupService : IDatabaseSetupService
             .AsReadOnly();
     }
 
-    public void SaveConnection(DatabaseConnectionModel connection)
+    public Result SaveConnection(DatabaseConnectionModel connection)
     {
-        ArgumentNullException.ThrowIfNull(connection);
+        if (connection is null)
+        {
+            return Result.Fail(ErrorType.Validation, "Дані підключення не передано.");
+        }
 
         if (connection.Id == Guid.Empty)
         {
@@ -164,7 +171,17 @@ public class DatabaseSetupService : IDatabaseSetupService
 
         stored.RemoveAll(item => item.Id == connection.Id);
         stored.Add(updated);
-        this.WriteStored(stored);
+
+        // Межа з файловою системою: диск повний, немає прав на %APPDATA% — повертаємо як помилку, а не падаємо
+        try
+        {
+            this.WriteStored(stored);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Logger.Error(ex, "Не вдалося записати збережені підключення у {Path}", this.ConnectionsFilePath);
+            return Result.Fail(ErrorType.Unexpected, "Не вдалося зберегти підключення на диск.");
+        }
 
         Logger.Information(
             "Збережено підключення {ConnectionName} ({DbUser}@{Host}:{Port}/{Database})",
@@ -173,6 +190,8 @@ public class DatabaseSetupService : IDatabaseSetupService
             connection.Host,
             connection.Port,
             connection.Database);
+
+        return Result.Ok();
     }
 
     public void DeleteConnection(Guid connectionId)
@@ -224,20 +243,35 @@ public class DatabaseSetupService : IDatabaseSetupService
         }
     }
 
-    public void RememberSession(Guid connectionId, RememberedSessionModel session)
+    public Result RememberSession(Guid connectionId, RememberedSessionModel session)
     {
-        ArgumentNullException.ThrowIfNull(session);
+        if (session is null)
+        {
+            return Result.Fail(ErrorType.Validation, "Дані входу не передано.");
+        }
 
         var stored = this.ReadStored();
         var connection = stored.Find(item => item.Id == connectionId);
         if (connection == null)
         {
-            return;
+            return Result.Fail(ErrorType.NotFound, "Підключення не знайдено.");
         }
 
         connection.ProtectedSession = SecretProtector.Protect(JsonSerializer.Serialize(session), SecretProtector.SessionPurpose);
-        this.WriteStored(stored);
+
+        // Межа з файловою системою: недоступний для запису %APPDATA% — не причина зривати вже виконаний вхід
+        try
+        {
+            this.WriteStored(stored);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Logger.Warning(ex, "Не вдалося зберегти вхід для підключення {ConnectionName}", connection.Name);
+            return Result.Fail(ErrorType.Unexpected, "Не вдалося зберегти вхід на диск.");
+        }
+
         Logger.Information("Запам'ятовано вхід користувача {UserId} для підключення {ConnectionName}", session.UserId, connection.Name);
+        return Result.Ok();
     }
 
     public void ForgetSession(Guid connectionId)

@@ -1,4 +1,5 @@
 ﻿using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 
 namespace SoftwareEngineering.BLL.Interfaces;
 
@@ -6,7 +7,10 @@ public interface IDatabaseSetupService
 {
     Task<bool> TestConnectionAsync(string connectionString, CancellationToken cancellationToken = default);
 
-    Task ApplyMigrationsAsync(string connectionString, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Створює/оновлює структуру БД. Помилку SQL чи мережі повертає як Result, а не винятком.
+    /// </summary>
+    Task<Result> ApplyMigrationsAsync(string connectionString, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Повертає збережені підключення: спочатку ті, що використовувались останніми.
@@ -16,7 +20,7 @@ public interface IDatabaseSetupService
     /// <summary>
     /// Додає нове підключення або оновлює існуюче з тим самим Id. Пароль шифрується перед записом на диск.
     /// </summary>
-    void SaveConnection(DatabaseConnectionModel connection);
+    Result SaveConnection(DatabaseConnectionModel connection);
 
     void DeleteConnection(Guid connectionId);
 
@@ -30,7 +34,7 @@ public interface IDatabaseSetupService
     /// <summary>
     /// Запам'ятовує вхід для бази; попередній збережений акаунт цієї бази замінюється.
     /// </summary>
-    void RememberSession(Guid connectionId, RememberedSessionModel session);
+    Result RememberSession(Guid connectionId, RememberedSessionModel session);
 
     void ForgetSession(Guid connectionId);
 }

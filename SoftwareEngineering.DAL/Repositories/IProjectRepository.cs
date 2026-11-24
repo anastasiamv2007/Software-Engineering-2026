@@ -16,9 +16,17 @@ public interface IProjectRepository
     /// </summary>
     Task<ProjectRole?> GetMemberRoleAsync(Guid projectId, Guid userId);
 
+    Task UpdateMemberRoleAsync(Guid projectId, Guid userId, ProjectRole role);
     Task UpdateAsync(Project project);
     Task DeleteAsync(Guid id);
 
     Task AddMemberAsync(ProjectMember member);
     Task<IReadOnlyList<User>> GetProjectUsersAsync(Guid projectId);
+    Task<IReadOnlyList<ProjectMember>> GetMembersAsync(Guid projectId);
+    Task<int> RemoveMemberAsync(Guid projectId, Guid userId);
+
+    /// <summary>
+    /// Атомарно передає власність. Повертає false, якщо проєкт не знайдено або новий власник не є його учасником.
+    /// </summary>
+    Task<bool> TransferOwnershipAsync(Guid projectId, Guid newOwnerId);
 }

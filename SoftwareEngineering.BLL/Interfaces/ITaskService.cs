@@ -6,42 +6,39 @@ namespace SoftwareEngineering.BLL.Interfaces;
 
 public interface ITaskService : IService
 {
-    Task<IReadOnlyList<TaskModel>> GetAllAsync();
+    Task<Result<IReadOnlyList<TaskModel>>> GetAllAsync();
 
     /// <summary>
     /// Завдання лише тих проєктів, де користувач є власником або співвиконавцем.
     /// </summary>
-    Task<IReadOnlyList<TaskModel>> GetUserTasksAsync(Guid userId);
+    Task<Result<IReadOnlyList<TaskModel>>> GetUserTasksAsync(Guid userId);
 
     /// <summary>
     /// Повна інформація про завдання; доступна лише учасникам його проєкту.
     /// </summary>
-    Task<TaskDetailsModel> GetDetailsAsync(Guid taskId, Guid currentUserId);
+    Task<Result<TaskDetailsModel>> GetDetailsAsync(Guid taskId, Guid currentUserId);
 
-    Task<TaskModel> CreateAsync(TaskModel model);
+    Task<Result<TaskModel>> CreateAsync(TaskModel model);
 
+    Task<Result<TaskModel>> GetByIdAsync(Guid id);
 
-    // 7 update progress
-    Task<TaskModel> UpdateProgressAsync(Guid taskId, TaskItemStatus newStatus, Guid currentUserId);
+    Task<Result<TaskModel>> UpdateAsync(TaskModel model, Guid currentUserId);
 
-    // 2
-    Task<TaskModel> GetByIdAsync(Guid id);
+    Task<Result<TaskModel>> UpdateProgressAsync(Guid taskId, TaskItemStatus newStatus, Guid currentUserId);
 
-    //3
-    Task<TaskModel> UpdateAsync(TaskModel model, Guid currentUserId);
+    Task<Result<TaskModel>> UpdateDeadlineAsync(Guid taskId, DateTime? newDeadline, Guid currentUserId);
 
-    // 4 delete task
-    Task<TaskModel> DeleteTaskByOwnerAsync(TaskModel model, Guid currentUserId);
+    Task<Result<TaskModel>> DeleteTaskByOwnerAsync(TaskModel model, Guid currentUserId);
 
-    // 5
-
-    Task DeleteTaskAsync(Guid taskId, Guid currentUserId);
-
-    // 6
-    Task<TaskModel> UpdateDeadlineAsync(Guid taskId, DateTime? newDeadline, Guid currentUserId);
+    Task<Result> DeleteTaskAsync(Guid taskId, Guid currentUserId);
 
     Task<Result<TaskModel>> AssignAsync(Guid taskId, Guid? assigneeId, Guid currentUserId);
 
     Task<Result<IReadOnlyList<AssigneeOptionModel>>> GetAssigneeCandidatesAsync(Guid taskId, Guid currentUserId);
 
+    /// <summary>
+    /// Створює копію завдання в тому ж проєкті: новий код, статус «До виконання», власник — поточний користувач.
+    /// Коментарі, виконавець і статус не копіюються; підзадачі — за бажанням і без відміток.
+    /// </summary>
+    Task<Result<TaskModel>> DuplicateAsync(Guid sourceTaskId, DuplicateTaskModel model, Guid currentUserId);
 }

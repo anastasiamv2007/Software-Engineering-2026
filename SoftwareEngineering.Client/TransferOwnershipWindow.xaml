@@ -1,0 +1,45 @@
+<Window x:Class="SoftwareEngineering.Client.TransferOwnershipWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Передача прав власності"
+        Width="480"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#F8FAFC">
+
+    <Border Margin="20" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="10" Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="Передача прав власності" FontSize="18" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,6"/>
+            <TextBlock Grid.Row="1" x:Name="TxtProjectSubtitle" Text="Оберіть нового власника проєкту" FontSize="13" Foreground="#64748B" Margin="0,0,0,16"/>
+
+            <StackPanel Grid.Row="2" Margin="0,0,0,14">
+                <TextBlock Text="Новий власник (учасник проєкту) *" FontSize="12" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
+                <ComboBox x:Name="CmbNewOwner" Height="36" VerticalContentAlignment="Center" Padding="8,0"/>
+            </StackPanel>
+
+            <!-- Попередження згідно з ТЗ -->
+			<Border Grid.Row="3" Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="8" Padding="12">
+				<TextBlock Text="⚠️ Увага! Після передачі прав ви втратите статус власника та станете співвиконавцем (CoExecutor). Ви більше не зможете видаляти проєкт, редагувати його назву чи керувати учасниками."
+                           TextWrapping="Wrap" FontSize="12" Foreground="#991B1B"/>
+			</Border>
+
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="Скасувати" Width="100" Height="34" Margin="0,0,8,0"
+                        Background="White" Foreground="#1E293B" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand"
+                        Click="BtnCancel_Click"/>
+                <Button x:Name="BtnConfirm" Content="Передати власність" Width="150" Height="34"
+                        Background="#D97706" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"
+                        Click="BtnConfirm_Click"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

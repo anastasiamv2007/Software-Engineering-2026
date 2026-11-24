@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
-using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
 using SoftwareEngineering.DAL.Entities;
 using SoftwareEngineering.DAL.Repositories;
@@ -34,17 +34,35 @@ public class ProjectServiceTests
         var result = await service.CreateProjectAsync(model, userId);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.NotEqual(Guid.Empty, result.Id);
-        Assert.Equal(model.Name, result.Name);
+        Assert.True(result.IsSuccess);
+        Assert.NotEqual(Guid.Empty, result.Value!.Id);
+        Assert.Equal(model.Name, result.Value.Name);
         this.repositoryMock.Verify(repo => repo.AddAsync(It.IsAny<Project>()), Times.Once);
+    }
+
+    // Автор проєкту одразу стає його учасником з роллю Owner
+    [Fact]
+    public async Task CreateProjectAsync_ValidModel_AddsOwnerAsMember()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        this.CaptureSavedProject();
+        var service = this.CreateService();
+
+        // Act
+        await service.CreateProjectAsync(CreateValidModel(userId), userId);
+
+        // Assert
+        var member = Assert.Single(this.savedProject!.Members);
+        Assert.Equal(userId, member.UserId);
+        Assert.Equal(DAL.Enums.ProjectRole.Owner, member.Role);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
-    public async Task CreateProjectAsync_EmptyName_ThrowsValidationException(string? invalidName)
+    public async Task CreateProjectAsync_EmptyName_ReturnsValidation(string? invalidName)
     {
         // Arrange
         var userId = Guid.NewGuid();
@@ -52,20 +70,44 @@ public class ProjectServiceTests
         model.Name = invalidName!;
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateProjectAsync(model, userId));
+        // Act
+        var result = await service.CreateProjectAsync(model, userId);
+
+        // Assert
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
         this.repositoryMock.Verify(repo => repo.AddAsync(It.IsAny<Project>()), Times.Never);
     }
 
     [Fact]
-    public async Task CreateProjectAsync_EmptyOwnerId_ThrowsValidationException()
+    public async Task CreateProjectAsync_EmptyOwnerId_ReturnsValidation()
     {
         // Arrange
         var model = CreateValidModel(Guid.Empty);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateProjectAsync(model, Guid.Empty));
+        // Act
+        var result = await service.CreateProjectAsync(model, Guid.Empty);
+
+        // Assert
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+    }
+
+    [Fact]
+    public async Task CreateProjectAsync_NameAlreadyExists_ReturnsDuplicate()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        this.repositoryMock
+            .Setup(repo => repo.FindByNameAsync("Новий проєкт"))
+            .ReturnsAsync(new Project { Id = Guid.NewGuid(), Name = "Новий проєкт" });
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.CreateProjectAsync(CreateValidModel(userId), userId);
+
+        // Assert
+        Assert.Equal(ErrorType.Duplicate, result.Error!.Type);
+        this.repositoryMock.Verify(repo => repo.AddAsync(It.IsAny<Project>()), Times.Never);
     }
 
     // ==========================================
@@ -93,13 +135,39 @@ public class ProjectServiceTests
         var result = await service.GetUserProjectsAsync(userId);
 
         // Assert
-        Assert.NotNull(result);
-        var list = result.ToList();
+        Assert.True(result.IsSuccess);
+        var list = result.Value!.ToList();
         Assert.Equal(2, list.Count);
         Assert.Equal("Проєкт 1", list[0].Name);
     }
 
-    
+    [Fact]
+    public async Task GetUserProjectsAsync_EmptyUserId_ReturnsValidation()
+    {
+        // Arrange
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.GetUserProjectsAsync(Guid.Empty);
+
+        // Assert
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+        this.repositoryMock.Verify(repo => repo.GetAllByUserIdAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ProjectNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.GetByIdAsync(Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(ErrorType.NotFound, result.Error!.Type);
+    }
+
     // ==========================================
     // 3. UPDATE TESTS
     // ==========================================
@@ -130,26 +198,30 @@ public class ProjectServiceTests
         var service = this.CreateService();
 
         // Act
-        await service.UpdateProjectAsync(validModel, ownerId);
+        var result = await service.UpdateProjectAsync(validModel, ownerId);
 
         // Assert
+        Assert.True(result.IsSuccess);
         this.repositoryMock.Verify(repo => repo.UpdateAsync(It.Is<Project>(p => p.Id == projectId && p.Name == "Оновлена назва")), Times.Once);
     }
 
     [Fact]
-    public async Task UpdateProjectAsync_EmptyName_ThrowsValidationException()
+    public async Task UpdateProjectAsync_EmptyName_ReturnsValidation()
     {
         // Arrange
         var invalidModel = new UpdateProjectModel { Id = Guid.NewGuid(), Name = string.Empty };
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateProjectAsync(invalidModel, Guid.NewGuid()));
+        // Act
+        var result = await service.UpdateProjectAsync(invalidModel, Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
         this.repositoryMock.Verify(repo => repo.UpdateAsync(It.IsAny<Project>()), Times.Never);
     }
 
     [Fact]
-    public async Task UpdateProjectAsync_ProjectNotFound_ThrowsException()
+    public async Task UpdateProjectAsync_ProjectNotFound_ReturnsNotFound()
     {
         // Arrange
         var model = new UpdateProjectModel { Id = Guid.NewGuid(), Name = "Valid Name" };
@@ -158,8 +230,49 @@ public class ProjectServiceTests
             .ReturnsAsync((Project?)null);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.UpdateProjectAsync(model, Guid.NewGuid()));
+        // Act
+        var result = await service.UpdateProjectAsync(model, Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(ErrorType.NotFound, result.Error!.Type);
+    }
+
+    // Перейменувати на назву іншого проєкту не можна, а залишити свою — можна
+    [Fact]
+    public async Task UpdateProjectAsync_NameOfAnotherProject_ReturnsDuplicate()
+    {
+        // Arrange
+        var ownerId = Guid.NewGuid();
+        var project = new Project { Id = Guid.NewGuid(), Name = "Мій", OwnerId = ownerId };
+        this.repositoryMock.Setup(repo => repo.GetByIdAsync(project.Id)).ReturnsAsync(project);
+        this.repositoryMock
+            .Setup(repo => repo.FindByNameAsync("Чужий"))
+            .ReturnsAsync(new Project { Id = Guid.NewGuid(), Name = "Чужий" });
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.UpdateProjectAsync(new UpdateProjectModel { Id = project.Id, Name = "Чужий" }, ownerId);
+
+        // Assert
+        Assert.Equal(ErrorType.Duplicate, result.Error!.Type);
+        this.repositoryMock.Verify(repo => repo.UpdateAsync(It.IsAny<Project>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateProjectAsync_SameNameAsItself_Succeeds()
+    {
+        // Arrange
+        var ownerId = Guid.NewGuid();
+        var project = new Project { Id = Guid.NewGuid(), Name = "Мій", OwnerId = ownerId };
+        this.repositoryMock.Setup(repo => repo.GetByIdAsync(project.Id)).ReturnsAsync(project);
+        this.repositoryMock.Setup(repo => repo.FindByNameAsync("Мій")).ReturnsAsync(project);
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.UpdateProjectAsync(new UpdateProjectModel { Id = project.Id, Name = "Мій" }, ownerId);
+
+        // Assert
+        Assert.True(result.IsSuccess);
     }
 
     // ==========================================
@@ -181,14 +294,15 @@ public class ProjectServiceTests
         var service = this.CreateService();
 
         // Act
-        await service.DeleteProjectAsync(projectId, ownerId);
+        var result = await service.DeleteProjectAsync(projectId, ownerId);
 
         // Assert
+        Assert.True(result.IsSuccess);
         this.repositoryMock.Verify(repo => repo.DeleteAsync(projectId), Times.Once);
     }
 
     [Fact]
-    public async Task DeleteProjectAsync_ProjectNotFound_ThrowsException()
+    public async Task DeleteProjectAsync_ProjectNotFound_ReturnsNotFound()
     {
         // Arrange
         var projectId = Guid.NewGuid();
@@ -197,8 +311,11 @@ public class ProjectServiceTests
             .ReturnsAsync((Project?)null);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.DeleteProjectAsync(projectId, Guid.NewGuid()));
+        // Act
+        var result = await service.DeleteProjectAsync(projectId, Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(ErrorType.NotFound, result.Error!.Type);
         this.repositoryMock.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
     }
 
@@ -207,30 +324,72 @@ public class ProjectServiceTests
     // ==========================================
 
     [Fact]
-    public async Task UpdateProjectAsync_UserIsNotOwner_ThrowsValidationException()
+    public async Task UpdateProjectAsync_UserIsNotOwner_ReturnsForbidden()
     {
         // Arrange
         var project = new Project { Id = Guid.NewGuid(), Name = "Чужий проєкт", OwnerId = Guid.NewGuid() };
         this.repositoryMock.Setup(repo => repo.GetByIdAsync(project.Id)).ReturnsAsync(project);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(
-            () => service.UpdateProjectAsync(new UpdateProjectModel { Id = project.Id, Name = "Нова назва" }, Guid.NewGuid()));
+        // Act
+        var result = await service.UpdateProjectAsync(new UpdateProjectModel { Id = project.Id, Name = "Нова назва" }, Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(ErrorType.Forbidden, result.Error!.Type);
         this.repositoryMock.Verify(repo => repo.UpdateAsync(It.IsAny<Project>()), Times.Never);
     }
 
     [Fact]
-    public async Task DeleteProjectAsync_UserIsNotOwner_ThrowsValidationException()
+    public async Task DeleteProjectAsync_UserIsNotOwner_ReturnsForbidden()
     {
         // Arrange
         var project = new Project { Id = Guid.NewGuid(), Name = "Чужий проєкт", OwnerId = Guid.NewGuid() };
         this.repositoryMock.Setup(repo => repo.GetByIdAsync(project.Id)).ReturnsAsync(project);
         var service = this.CreateService();
 
-        // Act and Assert
-        await Assert.ThrowsAsync<ValidationException>(() => service.DeleteProjectAsync(project.Id, Guid.NewGuid()));
+        // Act
+        var result = await service.DeleteProjectAsync(project.Id, Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(ErrorType.Forbidden, result.Error!.Type);
         this.repositoryMock.Verify(repo => repo.DeleteAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    // ==========================================
+    // 6. GET OR CREATE
+    // ==========================================
+
+    [Fact]
+    public async Task GetOrCreateByNameAsync_ExistingProject_ReturnsItWithoutCreating()
+    {
+        // Arrange
+        var existing = new Project { Id = Guid.NewGuid(), Name = "Лаб", OwnerId = Guid.NewGuid() };
+        this.repositoryMock.Setup(repo => repo.FindByNameAsync("Лаб")).ReturnsAsync(existing);
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.GetOrCreateByNameAsync("  Лаб  ", Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(existing.Id, result.Value!.Id);
+        this.repositoryMock.Verify(repo => repo.AddAsync(It.IsAny<Project>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetOrCreateByNameAsync_NewName_CreatesProject()
+    {
+        // Arrange
+        this.CaptureSavedProject();
+        var ownerId = Guid.NewGuid();
+        var service = this.CreateService();
+
+        // Act
+        var result = await service.GetOrCreateByNameAsync("Новий", ownerId);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Новий", this.savedProject!.Name);
+        Assert.Equal(ownerId, this.savedProject.OwnerId);
     }
 
     // ==========================================

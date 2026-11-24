@@ -1,6 +1,4 @@
-﻿using Serilog;
-using SoftwareEngineering.BLL.Exceptions;
-using SoftwareEngineering.BLL.Interfaces;
+﻿using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 using SoftwareEngineering.BLL.Results;
 using SoftwareEngineering.BLL.Services;
@@ -22,9 +20,11 @@ namespace SoftwareEngineering.Client
         private readonly ICategoryService categoryService;
         private readonly ISubtaskService subtaskService;
         private readonly ICommentService commentService;
+        private readonly IReviewService reviewService;
         private Guid? detailsTaskId;
         private CategoryModel? selectedCategory;
         private string selectedCategoryColor = CategoryPalette[0];
+        private readonly IStatisticsService statisticsService;
 
 
         private static readonly string[] CategoryPalette =
@@ -32,7 +32,7 @@ namespace SoftwareEngineering.Client
             "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4", "#6366F1",
         };
 
-        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService)
+        public MainWindow(ITaskService taskService, IProjectService projectService, IUserSession userSession, ICategoryService categoryService, ISubtaskService subtaskService, ICommentService commentService, IStatisticsService statisticsService, IReviewService reviewService)
         {
             InitializeComponent();
             this.taskService = taskService ?? throw new ArgumentNullException(nameof(taskService));
@@ -41,6 +41,8 @@ namespace SoftwareEngineering.Client
             this.categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
             this.subtaskService = subtaskService ?? throw new ArgumentNullException(nameof(subtaskService));
             this.commentService = commentService ?? throw new ArgumentNullException(nameof(commentService));
+            this.reviewService = reviewService ?? throw new ArgumentNullException(nameof(reviewService));
+            this.statisticsService = statisticsService ?? throw new ArgumentNullException(nameof(statisticsService));
 
             BuildCategoryPalette();
             StartCategoryCreateMode();
@@ -124,7 +126,8 @@ namespace SoftwareEngineering.Client
             }
         }
 
-        private void ShowPage(string page)
+        // async void: помилка завантаження сторінки дійде до глобального обробника в App, а не загубиться
+        private async void ShowPage(string page)
         {
             foreach (FrameworkElement element in PagesHost.Children)
             {
@@ -134,12 +137,17 @@ namespace SoftwareEngineering.Client
             // Список категорій оновлюємо щоразу, коли відкривається вкладка
             if (page == "Categories")
             {
-                _ = LoadCategoriesAsync();
+                await LoadCategoriesAsync();
             }
 
             if (page == "Projects")
             {
                 var projectsView = Page_Projects.Children.OfType<ProjectsView>().FirstOrDefault();
+            }
+
+            if (page == "Review")
+            {
+                await LoadReviewQueueAsync();
             }
         }
 
@@ -151,17 +159,16 @@ namespace SoftwareEngineering.Client
 
         private async Task LoadTasksAsync()
         {
-            try
+            // Лише завдання проєктів, де користувач — власник або співвиконавець
+            var result = await taskService.GetUserTasksAsync(CurrentUserId);
+            if (result.ShowIfFailed("Не вдалося завантажити завдання"))
             {
-                // Лише завдання проєктів, де користувач — власник або співвиконавець
-                allTasks = await taskService.GetUserTasksAsync(CurrentUserId);
-                ApplyFilter();
-                UpdateStats();
+                return;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Не вдалося завантажити завдання: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+
+            allTasks = result.Value!;
+            ApplyFilter();
+            await UpdateStatsAsync(); ;
         }
 
         private void ApplyFilter()
@@ -174,15 +181,21 @@ namespace SoftwareEngineering.Client
                 Priority = GetSelectedEnum<TaskPriority>(FilterPriorityComboBox),
                 CategoryId = GetSelectedCategoryId(FilterCategoryComboBox),
                 OnlyOverdue = FilterOverdueCheckBox.IsChecked ?? false,
+                DeadlineFrom = FilterDeadlineFromPicker.SelectedDate,
+                DeadlineTo = FilterDeadlineToPicker.SelectedDate,
                 SortBy = GetSelectedEnum<TaskSortOption>(SortComboBox) ?? TaskSortOption.ByDeadlineAsc,
             };
 
             var filterResult = TaskFilter.Apply(allTasks, criteria);
             if (filterResult.IsFailure)
             {
-                Log.Warning("Помилка фільтрації задач: {Error}", filterResult.Error!.Message);
+                // Помилку видно під панеллю фільтрів, а не у вікні: фільтр змінюють часто, MessageBox заважав би
+                FilterErrorText.Text = filterResult.Error!.Message;
+                FilterErrorText.Visibility = Visibility.Visible;
                 return;
             }
+
+            FilterErrorText.Visibility = Visibility.Collapsed;
 
             IReadOnlyList<TaskModel> filteredList = filterResult.Value!;
 
@@ -275,6 +288,8 @@ namespace SoftwareEngineering.Client
             FilterCategoryComboBox.SelectedIndex = 0;
             SortComboBox.SelectedIndex = 0;
             FilterOverdueCheckBox.IsChecked = false;
+            FilterDeadlineFromPicker.SelectedDate = null;
+            FilterDeadlineToPicker.SelectedDate = null;
             SearchBox.Text = string.Empty;
 
             ApplyFilter();
@@ -285,31 +300,33 @@ namespace SoftwareEngineering.Client
             if (allTasks != null) ApplyFilter();
         }
 
-        private void UpdateStats()
+        private async Task UpdateStatsAsync()
         {
-            var now = DateTime.UtcNow;
-            var total = allTasks.Count;
-            var done = allTasks.Count(t => t.Status == TaskItemStatus.Done);
-            var inProgress = allTasks.Count(t => t.Status == TaskItemStatus.InProgress);
-            var overdue = allTasks.Count(t => t.Status != TaskItemStatus.Done && t.Deadline.HasValue && t.Deadline.Value.ToUniversalTime() < now);
-            var active = total - done;
+            var result = await statisticsService.GetStatisticsAsync(CurrentUserId);
+            if (result.ShowIfFailed("Не вдалося отримати статистику"))
+            {
+                return;
+            }
 
-            StatTotal.Text = total.ToString();
-            StatInProgress.Text = inProgress.ToString();
-            StatDone.Text = done.ToString();
-            StatOverdue.Text = overdue.ToString();
+            var stats = result.Value!;
+
+            StatTotal.Text = stats.Total.ToString();
+            StatInProgress.Text = stats.InProgress.ToString();
+            StatDone.Text = stats.Completed.ToString();
+            StatOverdue.Text = stats.Overdue.ToString();
+
+            AnTotal.Text = $"Загальна кількість завдань: {stats.Total}";
+            AnDone.Text = $"Виконано: {stats.Completed}";
+            AnActive.Text = $"Невиконано: {stats.Active}";
+            AnOverdue.Text = $"Протерміновано: {stats.Overdue}";
+            AnProgress.Value = stats.CompletedPercent;
+
 
             UpcomingList.ItemsSource = allTasks
               .Where(t => t.Status != TaskItemStatus.Done)
               .OrderBy(t => t.Deadline)
               .Take(5)
               .ToList();
-
-            AnTotal.Text = $"Загальна кількість завдань: {total}";
-            AnDone.Text = $"Виконано: {done}";
-            AnActive.Text = $"Невиконано: {active}";
-            AnOverdue.Text = $"Протерміновано: {overdue}";
-            AnProgress.Value = total == 0 ? 0 : done * 100.0 / total;
         }
 
         private void GoToCreate_Click(object sender, RoutedEventArgs e)
@@ -320,71 +337,85 @@ namespace SoftwareEngineering.Client
 
         private async void CreateButton_Click(object sender, RoutedEventArgs e)
         {
-            try
+            var priority = TaskPriority.Medium;
+            if (PriorityComboBox.SelectedItem is ComboBoxItem { Tag: TaskPriority parsed })
             {
-                var priority = TaskPriority.Medium;
-                if (PriorityComboBox.SelectedItem is ComboBoxItem { Tag: TaskPriority parsed })
-                {
-                    priority = parsed;
-                }
-
-                var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty, CurrentUserId);
-
-                await taskService.CreateAsync(new TaskModel
-                {
-                    ProjectId = project.Id,
-                    OwnerId = CurrentUserId,
-                    Title = TitleTextBox.Text?.Trim() ?? string.Empty,
-                    Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
-                    Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
-                    Priority = priority,
-                    CategoryId = GetSelectedCategoryId(CategoryComboBox),
-                    Status = TaskItemStatus.Todo,
-                });
-
-                MessageBox.Show("Завдання успішно створено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                TitleTextBox.Clear();
-                DescriptionTextBox.Clear();
-                CategoryComboBox.SelectedIndex = 0;
-                await LoadTasksAsync();
-                ShowPage("Tasks");
-                NavTasks.IsChecked = true;
+                priority = parsed;
             }
-            catch (ValidationException ex)
+
+            var project = await projectService.GetOrCreateByNameAsync(ProjectTextBox.Text ?? string.Empty, CurrentUserId);
+            if (project.ShowIfFailed("Завдання не створено"))
             {
-                MessageBox.Show(ex.Message, "Помилка валідації", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
-            catch (Exception ex)
+
+            var created = await taskService.CreateAsync(new TaskModel
             {
-                MessageBox.Show($"Сталася помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ProjectId = project.Value!.Id,
+                OwnerId = CurrentUserId,
+                Title = TitleTextBox.Text?.Trim() ?? string.Empty,
+                Description = DescriptionTextBox.Text?.Trim() ?? string.Empty,
+                Deadline = DeadlineDatePicker.SelectedDate ?? DateTime.Now,
+                Priority = priority,
+                CategoryId = GetSelectedCategoryId(CategoryComboBox),
+                Status = TaskItemStatus.Todo,
+            });
+            if (created.ShowIfFailed("Завдання не створено"))
+            {
+                return;
             }
+
+            MessageBox.Show($"Завдання {created.Value!.TaskCode} успішно створено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            TitleTextBox.Clear();
+            DescriptionTextBox.Clear();
+            CategoryComboBox.SelectedIndex = 0;
+            await LoadTasksAsync();
+            ShowPage("Tasks");
+            NavTasks.IsChecked = true;
         }
 
         private async void GoToDetails_Click(object sender, RoutedEventArgs e)
         {
             if (TasksDataGrid.SelectedItem is TaskModel selected)
             {
-                try
+                var details = await taskService.GetDetailsAsync(selected.Id, CurrentUserId);
+                if (details.ShowIfFailed("Деталі недоступні"))
                 {
-                    ShowTaskDetails(await taskService.GetDetailsAsync(selected.Id, CurrentUserId));
-                    await LoadSubtasksAsync();
-                    await LoadCommentsAsync();
-                    ShowPage("Details");
+                    return;
                 }
-                catch (ValidationException ex)
-                {
-                    MessageBox.Show(ex.Message, "Немає доступу", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message, "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+
+                ShowTaskDetails(details.Value!);
+                await LoadSubtasksAsync();
+                await LoadCommentsAsync();
+                ShowPage("Details");
             }
             else
             {
                 MessageBox.Show("Виберіть завдання зі списку.", "Увага", MessageBoxButton.OK, MessageBoxImage.Information);
             }
+        }
+
+        private async void CopyTask_Click(object sender, RoutedEventArgs e)
+        {
+            if (TasksDataGrid.SelectedItem is not TaskModel selected)
+            {
+                MessageBox.Show("Виберіть завдання, яке потрібно скопіювати.", "Увага", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var dialog = new DuplicateTaskWindow(taskService, selected, CurrentUserId) { Owner = this };
+            if (dialog.ShowDialog() != true || dialog.CreatedTask is not { } copy)
+            {
+                return;
+            }
+
+            MessageBox.Show($"Створено копію {copy.TaskCode} «{copy.Title}».", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            await LoadTasksAsync();
+            ShowPage("Tasks");
+            NavTasks.IsChecked = true;
+            TasksDataGrid.SelectedItem = allTasks.FirstOrDefault(task => task.Id == copy.Id);
         }
 
         private void ShowTaskDetails(TaskDetailsModel details)
@@ -435,6 +466,9 @@ namespace SoftwareEngineering.Client
 
             DetailsEditButton.IsEnabled = details.CanEdit;
 
+            // Копіювати, як і створювати, можуть лише власник проєкту та співвиконавці
+            DetailsCopyButton.IsEnabled = details.CurrentUserRole is ProjectRole.Owner or ProjectRole.CoExecutor;
+
             // Ті самі права, що перевіряє SubtaskService: відмічати може і виконавець, видаляти — автор завдання або власник проєкту
             detailsTaskId = task.Id;
             var canEditSubtasks = details.CanEdit || task.AssigneeId == CurrentUserId;
@@ -443,6 +477,12 @@ namespace SoftwareEngineering.Client
             DetailsSubtasksList.Tag = details.CanDeleteOrChangeDeadline ? Visibility.Visible : Visibility.Collapsed;
             NewSubtaskTitleTextBox.Clear();
             NewCommentTextBox.Clear();
+
+            var canSubmitForReview =
+                (details.CurrentUserRole is ProjectRole.Owner or ProjectRole.CoExecutor || task.AssigneeId == CurrentUserId) &&
+                task.Status is TaskItemStatus.Todo or TaskItemStatus.InProgress or TaskItemStatus.NeedsRevision;
+
+            DetailsSubmitReviewButton.Visibility = canSubmitForReview ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void AddInfoRow(string label, string value)
@@ -494,7 +534,7 @@ namespace SoftwareEngineering.Client
         {
             ProjectRole.Owner => "Власник",
             ProjectRole.CoExecutor => "Співвиконавець",
-            ProjectRole.Reviewer => "Рецензент",
+            ProjectRole.Reviewer => "Читач",
             _ => role.ToString(),
         };
 
@@ -554,47 +594,50 @@ namespace SoftwareEngineering.Client
         {
             if (currentSelectedTask == null) return;
 
-            try
+            var priority = TaskPriority.Medium;
+            if (EditPriorityComboBox.SelectedItem is ComboBoxItem selectedItem &&
+              selectedItem.Tag is TaskPriority parsedPriority)
             {
-                var priority = TaskPriority.Medium;
-                if (EditPriorityComboBox.SelectedItem is ComboBoxItem selectedItem &&
-                  selectedItem.Tag is TaskPriority parsedPriority)
-                {
-                    priority = parsedPriority;
-                }
+                priority = parsedPriority;
+            }
 
-                currentSelectedTask.Title = EditTitleTextBox.Text?.Trim() ?? string.Empty;
-                currentSelectedTask.Description = EditDescriptionTextBox.Text?.Trim() ?? string.Empty;
-                currentSelectedTask.Deadline = KeepTimeIfSameDay(currentSelectedTask.Deadline, EditDeadlineDatePicker.SelectedDate);
-                currentSelectedTask.Priority = priority;
-                currentSelectedTask.CategoryId = GetSelectedCategoryId(EditCategoryComboBox);
+            // Редагуємо копію: якщо сервіс відмовить, у списку лишаться справжні (збережені) значення
+            var edited = new TaskModel
+            {
+                Id = currentSelectedTask.Id,
+                ProjectId = currentSelectedTask.ProjectId,
+                Title = EditTitleTextBox.Text?.Trim() ?? string.Empty,
+                Description = EditDescriptionTextBox.Text?.Trim() ?? string.Empty,
+                Deadline = KeepTimeIfSameDay(currentSelectedTask.Deadline, EditDeadlineDatePicker.SelectedDate),
+                Priority = priority,
+                CategoryId = GetSelectedCategoryId(EditCategoryComboBox),
+            };
 
-                await taskService.UpdateAsync(currentSelectedTask, CurrentUserId);
-                if (EditAssigneeComboBox.IsEnabled)
+            var updated = await taskService.UpdateAsync(edited, CurrentUserId);
+            if (updated.ShowIfFailed("Завдання не оновлено"))
+            {
+                return;
+            }
+
+            if (EditAssigneeComboBox.IsEnabled)
+            {
+                var newAssigneeId = (EditAssigneeComboBox.SelectedItem as ComboBoxItem)?.Tag as Guid?;
+                if (newAssigneeId != currentSelectedTask.AssigneeId)
                 {
-                    var newAssigneeId = (EditAssigneeComboBox.SelectedItem as ComboBoxItem)?.Tag as Guid?;
-                    if (newAssigneeId != currentSelectedTask.AssigneeId)
+                    var assigned = await taskService.AssignAsync(currentSelectedTask.Id, newAssigneeId, CurrentUserId);
+                    if (assigned.ShowIfFailed("Зміни збережено, але виконавця не змінено"))
                     {
-                        var assignResult = await taskService.AssignAsync(currentSelectedTask.Id, newAssigneeId, CurrentUserId);
-                        if (assignResult.IsFailure)
-                        {
-                            MessageBox.Show(assignResult.Error!.Message, "Увага", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
+                        await LoadTasksAsync();
+                        return;
                     }
                 }
-
-                Log.Information("Оновлено завдання ID: {TaskId}", currentSelectedTask.Id);
-                MessageBox.Show("Завдання успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                await LoadTasksAsync();
-                ShowPage("Tasks");
-                NavTasks.IsChecked = true;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Сталася помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+
+            MessageBox.Show("Завдання успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            await LoadTasksAsync();
+            ShowPage("Tasks");
+            NavTasks.IsChecked = true;
         }
 
         private void GoToUpdateProgress_Click(object sender, RoutedEventArgs e)
@@ -608,34 +651,27 @@ namespace SoftwareEngineering.Client
 
         private async void SaveProgressButton_Click(object sender, RoutedEventArgs e)
         {
-            try
+            // Невалідний текст id дасть Guid.Empty — сервіс поверне зрозумілу помилку валідації
+            _ = Guid.TryParse(ProgTaskIdTextBox.Text?.Trim(), out var taskId);
+
+            var status = TaskItemStatus.InProgress;
+            if (ProgStatusComboBox.SelectedItem is ComboBoxItem selectedItem &&
+              selectedItem.Tag is TaskItemStatus parsedStatus)
             {
-                _ = Guid.TryParse(ProgTaskIdTextBox.Text?.Trim(), out var taskId);
-                var userId = CurrentUserId;
-
-                var status = TaskItemStatus.InProgress;
-                if (ProgStatusComboBox.SelectedItem is ComboBoxItem selectedItem &&
-                  selectedItem.Tag is TaskItemStatus parsedStatus)
-                {
-                    status = parsedStatus;
-                }
-
-                await taskService.UpdateProgressAsync(taskId, status, userId);
-
-                MessageBox.Show("Прогрес успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
-
-                await LoadTasksAsync();
-                ShowPage("Tasks");
-                NavTasks.IsChecked = true;
+                status = parsedStatus;
             }
-            catch (ValidationException ex)
+
+            var result = await taskService.UpdateProgressAsync(taskId, status, CurrentUserId);
+            if (result.ShowIfFailed("Прогрес не оновлено"))
             {
-                MessageBox.Show(ex.Message, "Помилка валідації", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Сталася помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+
+            MessageBox.Show("Прогрес успішно оновлено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            await LoadTasksAsync();
+            ShowPage("Tasks");
+            NavTasks.IsChecked = true;
         }
 
         private void GoToDelete_Click(object sender, RoutedEventArgs e)
@@ -658,28 +694,21 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            var userId = CurrentUserId;
-
-            try
+            var result = await taskService.DeleteTaskByOwnerAsync(new TaskModel { Id = taskId }, CurrentUserId);
+            if (result.IsFailure)
             {
-                var model = new TaskModel { Id = taskId };
-                await taskService.DeleteTaskByOwnerAsync(model, userId);
+                // На цій сторінці результат показується в рядку статусу, а не окремим вікном
+                var prefix = result.Error!.Type == ErrorType.Unexpected ? "ПОМИЛКА" : "ВІДХИЛЕНО";
+                DelStatusText.Text = $"[{prefix}]: {result.Error.Message}";
+                return;
+            }
 
-                DelStatusText.Text = $"[УСПІХ]: Завдання {taskId} успішно видалено!";
-                MessageBox.Show("Завдання успішно видалено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+            DelStatusText.Text = $"[УСПІХ]: Завдання {result.Value!.TaskCode} успішно видалено!";
+            MessageBox.Show("Завдання успішно видалено!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                await LoadTasksAsync();
-                ShowPage("Tasks");
-                NavTasks.IsChecked = true;
-            }
-            catch (ValidationException valEx)
-            {
-                DelStatusText.Text = $"[ВІДХИЛЕНО]: {valEx.Message}";
-            }
-            catch (Exception ex)
-            {
-                DelStatusText.Text = $"[ПОМИЛКА]: {ex.Message}";
-            }
+            await LoadTasksAsync();
+            ShowPage("Tasks");
+            NavTasks.IsChecked = true;
         }
 
         // ---------- Категорії ----------
@@ -904,23 +933,16 @@ namespace SoftwareEngineering.Client
                 return;
             }
 
-            SendCommentButton.IsEnabled = false;
-            try
-            {
-                var result = await commentService.AddAsync(taskId, NewCommentTextBox.Text, CurrentUserId);
-                if (result.IsFailure)
-                {
-                    MessageBox.Show(result.Error!.Message, "Коментар не надіслано", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
+            using var busy = UiBusy.Disable(SendCommentButton);
+            var result = await commentService.AddAsync(taskId, NewCommentTextBox.Text, CurrentUserId);
 
-                NewCommentTextBox.Clear();
-                await LoadCommentsAsync();
-            }
-            finally
+            if (result.ShowIfFailed("Коментар не надіслано"))
             {
-                SendCommentButton.IsEnabled = true;
+                return;
             }
+
+            NewCommentTextBox.Clear();
+            await LoadCommentsAsync();
         }
 
         private async void DeleteComment_Click(object sender, RoutedEventArgs e)
@@ -1044,6 +1066,120 @@ namespace SoftwareEngineering.Client
             }
 
             await LoadSubtasksAsync();
+        }
+
+        //..
+        private async void SubmitForReview_Click(object sender, RoutedEventArgs e)
+        {
+            if (detailsTaskId is not { } taskId)
+            {
+                return;
+            }
+
+            using var busy = UiBusy.Disable(DetailsSubmitReviewButton);
+            var result = await reviewService.SubmitForReviewAsync(taskId, CurrentUserId);
+
+            if (result.ShowIfFailed("Не вдалося відправити на перевірку"))
+            {
+                return;
+            }
+
+            MessageBox.Show("Завдання відправлено на перевірку!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            await LoadTasksAsync();
+            var details = await taskService.GetDetailsAsync(taskId, CurrentUserId);
+            if (details.IsSuccess)
+            {
+                ShowTaskDetails(details.Value!);
+            }
+        }
+
+        private async Task LoadReviewQueueAsync()
+        {
+            var result = await reviewService.GetReviewQueueAsync(CurrentUserId);
+            if (result.ShowIfFailed("Не вдалося завантажити чергу перевірки"))
+            {
+                return;
+            }
+
+            ReviewQueueDataGrid.ItemsSource = result.Value!;
+            ReviewSelectedTitleText.Text = result.Value!.Count == 0
+                ? "Немає завдань, що очікують перевірки"
+                : "Оберіть завдання зі списку ліворуч";
+            ReviewSelectedDescriptionText.Text = "Опис вибраного завдання з'явиться тут.";
+            ReviewCommentTextBox.Clear();
+            ReviewApproveButton.IsEnabled = false;
+            ReviewRequestRevisionButton.IsEnabled = false;
+        }
+
+        private async void RefreshReviewQueue_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadReviewQueueAsync();
+        }
+
+        private void ReviewQueueDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (ReviewQueueDataGrid.SelectedItem is ReviewTaskItemModel selected)
+            {
+                ReviewSelectedTitleText.Text = $"{selected.TaskCode} · {selected.Title}";
+                ReviewSelectedDescriptionText.Text = string.IsNullOrWhiteSpace(selected.Description)
+                    ? "Немає опису"
+                    : selected.Description;
+                ReviewApproveButton.IsEnabled = true;
+                ReviewRequestRevisionButton.IsEnabled = true;
+            }
+            else
+            {
+                ReviewApproveButton.IsEnabled = false;
+                ReviewRequestRevisionButton.IsEnabled = false;
+            }
+        }
+
+        private async void ApproveReview_Click(object sender, RoutedEventArgs e)
+        {
+            if (ReviewQueueDataGrid.SelectedItem is not ReviewTaskItemModel selected)
+            {
+                return;
+            }
+
+            // Кнопки вимкнені лише на час запиту; після успіху черга оновиться і вимкне їх сама (нічого не вибрано)
+            Result result;
+            using (UiBusy.Disable(ReviewApproveButton, ReviewRequestRevisionButton))
+            {
+                result = await reviewService.ApproveAsync(selected.TaskId, CurrentUserId);
+            }
+
+            if (result.ShowIfFailed("Не вдалося прийняти завдання"))
+            {
+                return;
+            }
+
+            MessageBox.Show($"Завдання {selected.TaskCode} прийнято (Done)!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+            await LoadTasksAsync();
+            await LoadReviewQueueAsync();
+        }
+
+        private async void RequestRevision_Click(object sender, RoutedEventArgs e)
+        {
+            if (ReviewQueueDataGrid.SelectedItem is not ReviewTaskItemModel selected)
+            {
+                return;
+            }
+
+            Result result;
+            using (UiBusy.Disable(ReviewApproveButton, ReviewRequestRevisionButton))
+            {
+                result = await reviewService.RequestRevisionAsync(selected.TaskId, ReviewCommentTextBox.Text, CurrentUserId);
+            }
+
+            if (result.ShowIfFailed("Не вдалося повернути завдання на доопрацювання"))
+            {
+                return;
+            }
+
+            MessageBox.Show($"Завдання {selected.TaskCode} повернуто на доопрацювання!", "Успіх", MessageBoxButton.OK, MessageBoxImage.Information);
+            await LoadTasksAsync();
+            await LoadReviewQueueAsync();
         }
     }
 }

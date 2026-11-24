@@ -13,6 +13,11 @@ public class TaskFilterCriteria
 
     public bool OnlyOverdue { get; set; }
 
+    // Період за дедлайном (місцеві дати, обидві межі включно); можна задати лише одну межу
+    public DateTime? DeadlineFrom { get; set; }
+
+    public DateTime? DeadlineTo { get; set; }
+
     // За замовчуванням сортуємо за дедлайном
     public TaskSortOption SortBy { get; set; } = TaskSortOption.ByDeadlineAsc;
 }

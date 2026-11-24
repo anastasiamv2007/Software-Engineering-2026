@@ -1,19 +1,20 @@
 ﻿using SoftwareEngineering.BLL.Models;
+using SoftwareEngineering.BLL.Results;
 using static SoftwareEngineering.BLL.Models.ProjectModel;
 
 namespace SoftwareEngineering.BLL.Interfaces;
 
 public interface IProjectService : IService
 {
-    Task<IEnumerable<ProjectModel>> GetUserProjectsAsync(Guid userId);
+    Task<Result<IReadOnlyList<ProjectModel>>> GetUserProjectsAsync(Guid userId);
 
-    Task<ProjectModel?> GetByIdAsync(Guid id);
+    Task<Result<ProjectModel>> GetByIdAsync(Guid id);
 
-    Task<ProjectModel> CreateProjectAsync(CreateProjectModel model, Guid currentUserId);
+    Task<Result<ProjectModel>> CreateProjectAsync(CreateProjectModel model, Guid currentUserId);
 
-    Task UpdateProjectAsync(UpdateProjectModel model, Guid currentUserId);
+    Task<Result> UpdateProjectAsync(UpdateProjectModel model, Guid currentUserId);
 
-    Task DeleteProjectAsync(Guid id, Guid currentUserId);
+    Task<Result> DeleteProjectAsync(Guid id, Guid currentUserId);
 
-    Task<ProjectModel> GetOrCreateByNameAsync(string name, Guid ownerId);
+    Task<Result<ProjectModel>> GetOrCreateByNameAsync(string name, Guid ownerId);
 }

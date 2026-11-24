@@ -1,6 +1,4 @@
 ﻿using System.Windows;
-using Serilog;
-using SoftwareEngineering.BLL.Exceptions;
 using SoftwareEngineering.BLL.Interfaces;
 using SoftwareEngineering.BLL.Models;
 
@@ -35,40 +33,35 @@ public partial class LoginWindow : Window {
     }
 
     private async void SubmitButton_Click(object sender, RoutedEventArgs e) {
-        try {
-            UserModel user;
+        // Кнопка ввімкнеться в кінці методу, навіть якщо БД недоступна і вилетить виняток
+        using var busy = UiBusy.Disable(SubmitButton);
 
-            if (_isRegisterMode) {
-                user = await _authService.RegisterAsync(new RegisterUserModel {
-                    FullName = FullNameBox.Text,
-                    Email = EmailBox.Text,
-                    Password = PasswordBox.Password
-                });
-            }
-            else {
-                user = await _authService.LoginAsync(new LoginUserModel {
-                    Email = EmailBox.Text,
-                    Password = PasswordBox.Password
-                });
-            }
+        var result = _isRegisterMode
+            ? await _authService.RegisterAsync(new RegisterUserModel {
+                FullName = FullNameBox.Text,
+                Email = EmailBox.Text,
+                Password = PasswordBox.Password
+            })
+            : await _authService.LoginAsync(new LoginUserModel {
+                Email = EmailBox.Text,
+                Password = PasswordBox.Password
+            });
 
-            // Зберігаємо залогіненого користувача в спільну сесію
-            _userSession.SetUser(user);
-
-            var app = (App)Application.Current;
-            await app.UpdateRememberedSessionAsync(user.Id, RememberMeCheckBox.IsChecked == true);
-
-            // Відкриваємо головне робоче вікно
-            var mainWindow = app.GetService<MainWindow>();
-            mainWindow.Show();
-            this.Close();
+        if (result.ShowIfFailed(_isRegisterMode ? "Реєстрація не вдалася" : "Вхід не вдався")) {
+            return;
         }
-        catch (ValidationException ex) {
-            MessageBox.Show(ex.Message, "Помилка валідації", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        catch (Exception ex) {
-            Log.Error(ex, "Неочікувана помилка у вікні входу (режим: {Mode})", _isRegisterMode ? "реєстрація" : "вхід");
-            MessageBox.Show($"Виникла неочікувана помилка: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+
+        var user = result.Value!;
+
+        // Зберігаємо залогіненого користувача в спільну сесію
+        _userSession.SetUser(user);
+
+        var app = (App)Application.Current;
+        await app.UpdateRememberedSessionAsync(user.Id, RememberMeCheckBox.IsChecked == true);
+
+        // Відкриваємо головне робоче вікно
+        var mainWindow = app.GetService<MainWindow>();
+        mainWindow.Show();
+        this.Close();
     }
 }
