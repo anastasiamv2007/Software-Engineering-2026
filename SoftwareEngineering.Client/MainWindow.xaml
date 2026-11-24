@@ -638,18 +638,42 @@
                 <StackPanel>
                     <TextBlock Text="Панель аналітики" Style="{StaticResource PageTitle}"/>
                     <TextBlock Text="Аналіз загальної продуктивності та навантаження команди" Style="{StaticResource PageSubtitle}"/>
-                    <Border Style="{StaticResource Card}">
+
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,16">
                         <StackPanel>
-                            <TextBlock x:Name="AnTotal" Margin="0,0,0,8"/>
-                            <TextBlock x:Name="AnDone" Margin="0,0,0,8"/>
-                            <TextBlock x:Name="AnActive" Margin="0,0,0,8"/>
-                            <TextBlock x:Name="AnOverdue" Margin="0,0,0,12"/>
+                            <TextBlock Text="Завершено вчасно" Foreground="#64748B" Margin="0,0,0,8"/>
                             <ProgressBar x:Name="AnProgress" Height="12" Maximum="100" Foreground="#10B981"/>
                         </StackPanel>
                     </Border>
+
+                    <UniformGrid Rows="1">
+                        <Border Style="{StaticResource Card}" Margin="0,0,12,0">
+                            <StackPanel>
+                                <TextBlock Text="Загальна кількість" Foreground="#64748B" FontSize="12"/>
+                                <TextBlock x:Name="AnTotal" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="0,0,12,0">
+                            <StackPanel>
+                                <TextBlock Text="Виконані" Foreground="#64748B" FontSize="12"/>
+                                <TextBlock x:Name="AnDone" FontSize="14" FontWeight="SemiBold" Foreground="#10B981" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="0,0,12,0">
+                            <StackPanel>
+                                <TextBlock Text="Активні" Foreground="#64748B" FontSize="12"/>
+                                <TextBlock x:Name="AnActive" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="Протерміновані" Foreground="#64748B" FontSize="12"/>
+                                <TextBlock x:Name="AnOverdue" FontSize="14" FontWeight="SemiBold" Foreground="#EF4444" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
                 </StackPanel>
             </Grid>
-
             <!-- ЗАГЛУШКИ ДЛЯ ІНШИХ РОЗДІЛІВ МЕНЮ -->
             <Grid x:Name="Page_Review" Visibility="Collapsed">
                 <TextBlock Text="Черга перевірки: у розробці" Style="{StaticResource PageTitle}"/>
