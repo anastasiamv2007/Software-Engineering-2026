@@ -221,7 +221,7 @@
 
             <!-- ПУЛ ПРОЄКТІВ -->
             <Grid x:Name="Page_Projects" Visibility="Collapsed">
-                <local:ProjectsView />
+                <local:ProjectsView ProjectsChanged="ProjectsView_ProjectsChanged"/>
             </Grid>
 
             <!-- 2. СПИСОК ЗАВДАНЬ -->

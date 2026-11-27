@@ -96,6 +96,12 @@ namespace SoftwareEngineering.Client
             return parts.Length == 0 ? "?" : string.Concat(parts.Take(2).Select(part => char.ToUpperInvariant(part[0])));
         }
 
+        // Вкладка «Проєкти» змінила проєкти — список завдань, статистика й календар мають це побачити одразу
+        private async void ProjectsView_ProjectsChanged(object? sender, EventArgs e)
+        {
+            await LoadTasksAsync();
+        }
+
         // Меню облікового запису відкривається над карткою користувача, на всю її ширину
         private void AccountButton_Click(object sender, RoutedEventArgs e)
         {
@@ -1423,6 +1429,12 @@ namespace SoftwareEngineering.Client
             var details = await taskService.GetDetailsAsync(taskId, CurrentUserId);
             if (details.ShowIfFailed("Деталі недоступні"))
             {
+                // Завдання вже видалили (або разом із проєктом, або з іншого ПК) — прибираємо його зі списку
+                if (details.Error!.Type == ErrorType.NotFound)
+                {
+                    await LoadTasksAsync();
+                }
+
                 return;
             }
 

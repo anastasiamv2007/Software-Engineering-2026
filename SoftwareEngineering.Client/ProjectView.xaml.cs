@@ -16,6 +16,12 @@ public partial class ProjectsView : UserControl
     private ProjectModel? _selectedProject;
     private bool _isCreateMode = false;
 
+    /// <summary>
+    /// Проєкти змінились так, що це зачіпає завдання (видалення проєкту каскадно видаляє його завдання,
+    /// вилучення учасника чи зміна ролі змінює доступ). Головне вікно на це перечитує свій список завдань.
+    /// </summary>
+    public event EventHandler? ProjectsChanged;
+
     public ProjectsView()
     {
         InitializeComponent();
@@ -138,14 +144,19 @@ public partial class ProjectsView : UserControl
         }
 
         await LoadProjectsAsync();
+        ProjectsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private async void BtnDelete_Click(object sender, RoutedEventArgs e)
     {
         if (_selectedProject != null)
         {
-            var result = MessageBox.Show($"Ви дійсно бажаєте видалити проєкт \"{_selectedProject.Name}\"?",
-                                         "Підтвердження", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            // У БД каскад: разом із проєктом зникають його завдання, підзадачі й коментарі — кажемо про це прямо
+            var tasksNote = _selectedProject.TasksCount > 0
+                ? $"\nРазом із ним буде видалено завдань: {_selectedProject.TasksCount} (з підзадачами та коментарями)."
+                : string.Empty;
+            var result = MessageBox.Show($"Ви дійсно бажаєте видалити проєкт \"{_selectedProject.Name}\"?{tasksNote}",
+                                         "Підтвердження", MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
             if (result == MessageBoxResult.Yes)
             {
@@ -157,6 +168,7 @@ public partial class ProjectsView : UserControl
                 }
 
                 await LoadProjectsAsync();
+                ProjectsChanged?.Invoke(this, EventArgs.Empty);
             }
         }
     }
@@ -241,6 +253,7 @@ public partial class ProjectsView : UserControl
         if (result.IsSuccess)
         {
             row.Role = newRole;
+            ProjectsChanged?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -274,6 +287,10 @@ public partial class ProjectsView : UserControl
         // Список перечитуємо в будь-якому разі: учасника могли вже прибрати з іншого ПК
         result.ShowIfFailed("Учасника не видалено");
         await LoadMembersAsync(_selectedProject.Id, true);
+        if (result.IsSuccess)
+        {
+            ProjectsChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private async void BtnTransferOwnership_Click(object sender, RoutedEventArgs e)
@@ -314,6 +331,7 @@ public partial class ProjectsView : UserControl
             var transferredProjectId = _selectedProject.Id;
 
             await LoadProjectsAsync();
+            ProjectsChanged?.Invoke(this, EventArgs.Empty);
 
             var updatedProject = LstProjects.Items
                 .OfType<ProjectModel>()
